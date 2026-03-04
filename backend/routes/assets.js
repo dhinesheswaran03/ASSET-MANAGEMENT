@@ -6,10 +6,8 @@ const multer = require("multer");
 const XLSX = require("xlsx");
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Use Alpha Vantage (free) or fallback to buy_price
 const getLivePrice = async (symbol) => {
   try {
-    // Option 1: Yahoo Finance (community proxy — more reliable)
     const res = await axios.get(
       `https://query2.finance.yahoo.com/v8/finance/chart/${symbol}`,
       { headers: { "User-Agent": "Mozilla/5.0" }, timeout: 5000 }
@@ -19,6 +17,13 @@ const getLivePrice = async (symbol) => {
   } catch {
     return null;
   }
+};
+
+// ✅ Moved outside the loop — clean helper function
+const getYahooSymbol = (symbol, exchange) => {
+  if (symbol.includes(".")) return symbol; // already has suffix like .NS or .BO
+  if (exchange && exchange.toUpperCase().includes("BSE")) return `${symbol}.BO`;
+  return `${symbol}.NS`; // default to NSE
 };
 
 // GET all assets with live prices
@@ -91,7 +96,6 @@ router.post("/import-zerodha", upload.single("file"), async (req, res) => {
 
     const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
 
-    // Try Equity sheet first, fallback to first sheet
     const sheetName = workbook.SheetNames.includes("Equity")
       ? "Equity"
       : workbook.SheetNames[0];
@@ -99,8 +103,7 @@ router.post("/import-zerodha", upload.single("file"), async (req, res) => {
     const sheet = workbook.Sheets[sheetName];
     const allRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
 
-    // ── Find the header row ──────────────────────────────────────────────
-    // Zerodha header contains "Instrument" and "Qty."
+    // ── Find header row ──────────────────────────────────────────────────
     let headerRowIdx = -1;
     let headers = [];
 
@@ -117,7 +120,7 @@ router.post("/import-zerodha", upload.single("file"), async (req, res) => {
       return res.status(400).json({ error: "Could not find header row. Is this a Zerodha holdings file?" });
     }
 
-    // ── Map column names to indexes ──────────────────────────────────────
+    // ── Map columns ──────────────────────────────────────────────────────
     const col = (names) => {
       for (const n of names) {
         const idx = headers.findIndex(h => h.toLowerCase().includes(n.toLowerCase()));
@@ -126,55 +129,48 @@ router.post("/import-zerodha", upload.single("file"), async (req, res) => {
       return -1;
     };
 
-    const iSymbol    = col(["Instrument", "Symbol", "Stock"]);
-    const iQty       = col(["Qty.", "Quantity", "Qty"]);
-    const iAvgCost   = col(["Avg. cost", "Avg Cost", "Average Price", "Buy Price"]);
-    const iLTP       = col(["LTP", "Last Price", "Current Price", "Mkt Price"]);
-    const iCurVal    = col(["Cur. val", "Current Value", "Mkt Value"]);
+    const iSymbol   = col(["Instrument", "Symbol", "Stock"]);
+    const iQty      = col(["Qty.", "Quantity", "Qty"]);
+    const iAvgCost  = col(["Avg. cost", "Avg Cost", "Average Price", "Buy Price"]);
+    const iLTP      = col(["LTP", "Last Price", "Current Price", "Mkt Price"]);
+    const iExchange = col(["Exchange", "Exch"]); // ✅ properly detect exchange column
 
     if (iSymbol === -1 || iQty === -1 || iAvgCost === -1) {
       return res.status(400).json({ error: "Required columns not found (Instrument, Qty, Avg Cost)" });
     }
 
-    // ── Process data rows ────────────────────────────────────────────────
+    // ── Process rows ─────────────────────────────────────────────────────
     const dataRows = allRows.slice(headerRowIdx + 1);
     let imported = 0, skipped = 0;
 
     for (const row of dataRows) {
-      const symbol = row[iSymbol] ? String(row[iSymbol]).trim() : null;
-      const qty    = Number(row[iQty]);
-      const avg    = Number(row[iAvgCost]);
-      const ltp    = iLTP !== -1 ? Number(row[iLTP]) : avg;
+      const symbol   = row[iSymbol]   ? String(row[iSymbol]).trim()   : null;
+      const qty      = Number(row[iQty]);
+      const avg      = Number(row[iAvgCost]);
+      const ltp      = iLTP      !== -1 ? Number(row[iLTP])      : avg;
+      // ✅ Read exchange from column if available, else default to NSE
+      const exchange = iExchange !== -1 ? String(row[iExchange] || "").trim() : "NSE";
 
-      // Skip empty/summary rows
       if (!symbol || isNaN(qty) || qty === 0 || isNaN(avg) || avg === 0) {
-        skipped++;
-        continue;
+        skipped++; continue;
       }
-
-      // Skip total/summary rows
       if (symbol.toLowerCase().includes("total") || symbol.toLowerCase().includes("summary")) {
-        skipped++;
-        continue;
+        skipped++; continue;
       }
 
-      // Append .NS for NSE symbol (Yahoo Finance format)
-      const yahooSymbol = symbol.includes(".") ? symbol : `${symbol}.NS`;
+      // ✅ Now correctly passes exchange value
+      const yahooSymbol = getYahooSymbol(symbol, exchange);
 
-      // Check if asset already exists (by symbol)
       const existing = await pool.query(
-        "SELECT id FROM assets WHERE symbol = $1",
-        [yahooSymbol]
+        "SELECT id FROM assets WHERE symbol = $1", [yahooSymbol]
       );
 
       if (existing.rows.length > 0) {
-        // Update existing
         await pool.query(
           `UPDATE assets SET buy_price=$1, quantity=$2, current_price=$3 WHERE symbol=$4`,
           [avg, qty, ltp || avg, yahooSymbol]
         );
       } else {
-        // Insert new
         await pool.query(
           `INSERT INTO assets (name, type, buy_price, quantity, symbol, current_price)
            VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -185,11 +181,7 @@ router.post("/import-zerodha", upload.single("file"), async (req, res) => {
       imported++;
     }
 
-    res.json({
-      imported,
-      skipped,
-      message: `Successfully imported ${imported} holdings`
-    });
+    res.json({ imported, skipped, message: `Successfully imported ${imported} holdings` });
 
   } catch (err) {
     console.error("Import error:", err);
