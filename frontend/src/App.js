@@ -332,6 +332,7 @@ export default function App() {
   const [sectorOpen, setSectorOpen]           = useState(false);
 
   // AI Advisor
+  const [aiOpen, setAiOpen]               = useState(false);
   const [chatMessages, setChatMessages]   = useState([]);
   const [chatInput, setChatInput]         = useState("");
   const [chatLoading, setChatLoading]     = useState(false);
@@ -366,8 +367,8 @@ export default function App() {
   }, [activeTab, historyDays]);
 
   useEffect(() => {
-    if (activeTab === "advisor" && quickInsights.length === 0) fetchQuickInsights();
-  }, [activeTab]);
+    if (aiOpen && quickInsights.length === 0) fetchQuickInsights();
+  }, [aiOpen]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior:"smooth" });
@@ -1263,12 +1264,12 @@ export default function App() {
         </Box>
         {loading && <LinearProgress sx={{ height:2 }} />}
         <Box sx={{ display:"flex", borderTop:"1px solid #f3f4f6", overflowX:"auto" }}>
-          {["dashboard","assets","liabilities","analytics","advisor"].map(tab => (
+          {["dashboard","assets","liabilities","analytics"].map(tab => (
             <Button key={tab} onClick={() => setActiveTab(tab)}
               sx={{ flex:1, py:1, borderRadius:0, textTransform:"capitalize", fontWeight:600, fontSize:12,
                 color:activeTab===tab?"#6366f1":"#9ca3af",
                 borderBottom:activeTab===tab?"2px solid #6366f1":"2px solid transparent" }}>
-              {tab === "advisor" ? "🤖 AI" : tab}
+              {tab}
             </Button>
           ))}
         </Box>
@@ -1367,8 +1368,7 @@ export default function App() {
         {/* ANALYTICS */}
         {activeTab === "analytics" && <AnalyticsTab />}
 
-        {/* AI ADVISOR */}
-        {activeTab === "advisor" && <AdvisorTab />}
+        {/* AI ADVISOR tab removed - now floating */}
 
       </Container>
 
@@ -1378,6 +1378,162 @@ export default function App() {
           boxShadow:"0 4px 20px rgba(99,102,241,0.4)", "&:hover":{ bgcolor:"#4f46e5" } }}>
         <AddIcon />
       </Fab>
+
+      {/* AI Advisor FAB */}
+      <Fab onClick={() => setAiOpen(true)}
+        sx={{ position:"fixed", bottom:28, right:88, bgcolor:"white", color:"#6366f1",
+          boxShadow:"0 4px 20px rgba(99,102,241,0.35)", border:"2px solid #6366f1",
+          "&:hover":{ bgcolor:"#f5f3ff" } }}>
+        <SmartToyIcon />
+      </Fab>
+
+      {/* AI Advisor Drawer */}
+      <Drawer anchor="right" open={aiOpen} onClose={() => setAiOpen(false)}
+        PaperProps={{ sx:{ width:{ xs:"100vw", sm:400 }, display:"flex", flexDirection:"column" } }}>
+
+        {/* Header */}
+        <Box sx={{ p:2, background:"linear-gradient(135deg,#6366f1,#8b5cf6)",
+          display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <Box sx={{ display:"flex", alignItems:"center", gap:1.5 }}>
+            <Avatar sx={{ bgcolor:"rgba(255,255,255,0.2)", width:36, height:36 }}>
+              <SmartToyIcon sx={{ color:"white", fontSize:20 }} />
+            </Avatar>
+            <Box>
+              <Typography variant="subtitle1" fontWeight={800} sx={{ color:"white", lineHeight:1.2 }}>
+                AI Portfolio Advisor
+              </Typography>
+              <Typography variant="caption" sx={{ color:"rgba(255,255,255,0.8)" }}>
+                Powered by Gemini · Live portfolio data
+              </Typography>
+            </Box>
+          </Box>
+          <IconButton onClick={() => setAiOpen(false)} sx={{ color:"white" }}>✕</IconButton>
+        </Box>
+
+        {/* Quick Insights horizontal scroll */}
+        {quickInsights.length > 0 && (
+          <Box sx={{ px:1.5, pt:1.5, display:"flex", gap:1, overflowX:"auto",
+            pb:1, borderBottom:"1px solid #f3f4f6",
+            "&::-webkit-scrollbar":{ display:"none" } }}>
+            {quickInsights.map((ins,i) => {
+              const CMAP = { positive:"#10b981", warning:"#f59e0b", action:"#6366f1", info:"#8b5cf6" };
+              const IMAP = { positive:"✅", warning:"⚠️", action:"🎯", info:"💡" };
+              return (
+                <Box key={i} sx={{ minWidth:160, p:1.2, borderRadius:2, flexShrink:0,
+                  bgcolor:"#f9fafb", border:"1px solid #e5e7eb" }}>
+                  <Typography variant="caption" fontWeight={700}
+                    sx={{ color:CMAP[ins.type]||"#6366f1", display:"block", mb:0.3 }}>
+                    {IMAP[ins.type]||"💡"} {ins.title}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color:"#6b7280", fontSize:10, lineHeight:1.4 }}>
+                    {ins.message}
+                  </Typography>
+                </Box>
+              );
+            })}
+          </Box>
+        )}
+
+        {/* Messages */}
+        <Box sx={{ flex:1, overflowY:"auto", p:2 }}>
+          {chatMessages.length === 0 ? (
+            <Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb:2, textAlign:"center", mt:2 }}>
+                Ask me anything about your portfolio:
+              </Typography>
+              <Box sx={{ display:"flex", flexWrap:"wrap", gap:1, justifyContent:"center" }}>
+                {[
+                  "How is my portfolio performing?",
+                  "Which stocks should I sell?",
+                  "Am I too concentrated?",
+                  "Should I rebalance?",
+                  "What is dragging my returns?",
+                  "How diversified am I?",
+                ].map((q,i) => (
+                  <Chip key={i} label={q} size="small" onClick={() => setChatInput(q)}
+                    sx={{ cursor:"pointer", bgcolor:"#f5f3ff", color:"#6366f1",
+                      fontWeight:600, fontSize:11, "&:hover":{ bgcolor:"#ede9fe" } }} />
+                ))}
+              </Box>
+            </Box>
+          ) : (
+            <>
+              {chatMessages.map((msg,i) => (
+                <Box key={i} sx={{ mb:2, display:"flex",
+                  justifyContent:msg.role==="user"?"flex-end":"flex-start" }}>
+                  {msg.role === "assistant" && (
+                    <Avatar sx={{ bgcolor:"#6366f1", width:28, height:28, mr:1, mt:0.5, flexShrink:0 }}>
+                      <SmartToyIcon sx={{ fontSize:16 }} />
+                    </Avatar>
+                  )}
+                  <Box sx={{ maxWidth:"80%", p:1.5, borderRadius:2,
+                    bgcolor:msg.role==="user"?"#6366f1":"#f9fafb",
+                    border:msg.role==="assistant"?"1px solid #e5e7eb":"none" }}>
+                    <Typography variant="body2"
+                      sx={{ color:msg.role==="user"?"white":"#111827",
+                        whiteSpace:"pre-wrap", lineHeight:1.6 }}>
+                      {msg.content}
+                    </Typography>
+                  </Box>
+                  {msg.role === "user" && (
+                    <Avatar sx={{ bgcolor:"#e5e7eb", width:28, height:28, ml:1, mt:0.5, flexShrink:0 }}>
+                      {currentUser?.avatar
+                        ? <Box component="img" src={currentUser.avatar} sx={{ width:28, height:28, borderRadius:"50%" }} />
+                        : <Typography sx={{ fontSize:12, fontWeight:700, color:"#6b7280" }}>
+                            {currentUser?.name?.charAt(0)||"U"}
+                          </Typography>
+                      }
+                    </Avatar>
+                  )}
+                </Box>
+              ))}
+              {chatLoading && (
+                <Box sx={{ display:"flex", alignItems:"center", gap:1, mb:2 }}>
+                  <Avatar sx={{ bgcolor:"#6366f1", width:28, height:28 }}>
+                    <SmartToyIcon sx={{ fontSize:16 }} />
+                  </Avatar>
+                  <Box sx={{ p:1.5, bgcolor:"#f9fafb", border:"1px solid #e5e7eb", borderRadius:2 }}>
+                    <Box sx={{ display:"flex", gap:0.5 }}>
+                      {[0,1,2].map(i => (
+                        <Box key={i} sx={{ width:6, height:6, borderRadius:"50%", bgcolor:"#6366f1",
+                          animation:"bounce 1.2s infinite", animationDelay:`${i*0.2}s`,
+                          "@keyframes bounce":{
+                            "0%,80%,100%":{ transform:"scale(0.6)", opacity:0.4 },
+                            "40%":{ transform:"scale(1)", opacity:1 }
+                          }}} />
+                      ))}
+                    </Box>
+                  </Box>
+                </Box>
+              )}
+              <div ref={chatEndRef} />
+            </>
+          )}
+        </Box>
+
+        {/* Input */}
+        <Box sx={{ p:2, borderTop:"1px solid #e5e7eb", display:"flex", flexDirection:"column", gap:1 }}>
+          {chatMessages.length > 0 && (
+            <Button size="small" onClick={() => setChatMessages([])}
+              sx={{ color:"#9ca3af", fontSize:11, alignSelf:"flex-start", p:0 }}>
+              Clear conversation
+            </Button>
+          )}
+          <Box sx={{ display:"flex", gap:1 }}>
+            <TextField fullWidth size="small" placeholder="Ask about your portfolio..."
+              value={chatInput}
+              onChange={e => setChatInput(e.target.value)}
+              onKeyDown={e => { if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); sendChatMessage(); }}}
+              sx={{ "& .MuiOutlinedInput-root":{ borderRadius:3 } }} />
+            <IconButton onClick={sendChatMessage} disabled={!chatInput.trim()||chatLoading}
+              sx={{ bgcolor:"#6366f1", color:"white", borderRadius:2,
+                "&:hover":{ bgcolor:"#4f46e5" },
+                "&:disabled":{ bgcolor:"#e5e7eb", color:"#9ca3af" } }}>
+              <SendIcon fontSize="small" />
+            </IconButton>
+          </Box>
+        </Box>
+      </Drawer>
 
       {/* Notifications Drawer */}
       <Drawer anchor="right" open={notifOpen} onClose={() => setNotifOpen(false)}>
