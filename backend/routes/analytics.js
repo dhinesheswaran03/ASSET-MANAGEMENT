@@ -143,7 +143,7 @@ router.post("/auto-sector", async (req, res) => {
   // Pharma
   "SUNPHARMA.NS":"Pharma", "DRREDDY.NS":"Pharma", "CIPLA.NS":"Pharma",
   "DIVISLAB.NS":"Pharma", "AUROPHARMA.NS":"Pharma", "NATCOPHARM.NS":"Pharma",
-  "ZYDUSLIFE.NS":"Pharma", "JYOTHYLAB.NS":"Pharma", "PHARMABEES.NS":"Pharma",
+  "ZYDUSLIFE.NS":"Pharma", "PHARMABEES.NS":"Pharma",
 
   // Auto
   "MARUTI.NS":"Auto", "TATAMOTORS.NS":"Auto", "M&M.NS":"Auto",
@@ -152,7 +152,7 @@ router.post("/auto-sector", async (req, res) => {
   // FMCG
   "HINDUNILVR.NS":"FMCG", "ITC.NS":"FMCG", "NESTLEIND.NS":"FMCG",
   "BRITANNIA.NS":"FMCG", "DABUR.NS":"FMCG", "MARICO.NS":"FMCG",
-  "COLPAL.NS":"FMCG", "GODREJCP.NS":"FMCG",
+  "COLPAL.NS":"FMCG", "JYOTHYLAB.NS":"FMCG", "GODREJCP.NS":"FMCG",
 
   // Energy
   "RELIANCE.NS":"Energy", "ONGC.NS":"Energy", "BPCL.NS":"Energy",
@@ -227,23 +227,41 @@ router.post("/auto-sector", async (req, res) => {
   "BHARTIARTL.BO":"Telecom", "IDEA.BO":"Telecom",
 };
 
-    const assets = await pool.query(
-      "SELECT id, symbol FROM assets WHERE symbol IS NOT NULL AND symbol != ''"
-    );
+    const assets = await pool.query("SELECT id, name, symbol, type FROM assets");
 
     let updated = 0;
     for (const asset of assets.rows) {
-      const sector = sectorMap[asset.symbol];
+      let sector = null;
+
+      // 1. Assign by asset type first
+      if (asset.type === "Gold")            sector = "Gold";
+      else if (asset.type === "Cash")       sector = "Cash";
+      else if (asset.type === "FD")         sector = "Fixed Income";
+      else if (asset.type === "MutualFund") sector = "Mutual Fund";
+      else if (asset.type === "Other")      sector = "Other";
+
+      // 2. For stocks, use symbol map
+      if (!sector && asset.symbol) {
+        sector = sectorMap[asset.symbol] || null;
+      }
+
+      // 3. Fallback: guess from name
+      if (!sector) {
+        const n = (asset.name || "").toLowerCase();
+        if (n.includes("gold"))                                    sector = "Gold";
+        else if (n.includes("cash") || n.includes("savings"))     sector = "Cash";
+        else if (n.includes("fd") || n.includes("fixed deposit")) sector = "Fixed Income";
+        else if (n.includes("nifty") || n.includes("index"))      sector = "Index Fund";
+        else if (n.includes("mutual") || n.includes("fund"))      sector = "Mutual Fund";
+      }
+
       if (sector) {
-        await pool.query(
-          "UPDATE assets SET sector=$1 WHERE id=$2",
-          [sector, asset.id]
-        );
+        await pool.query("UPDATE assets SET sector=$1 WHERE id=$2", [sector, asset.id]);
         updated++;
       }
     }
 
-    res.json({ message: `Auto-assigned sectors for ${updated} stocks` });
+    res.json({ message: `✅ Auto-assigned sectors for ${updated} assets` });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

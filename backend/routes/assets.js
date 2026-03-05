@@ -19,11 +19,29 @@ const getLivePrice = async (symbol) => {
   }
 };
 
-// ✅ Moved outside the loop — clean helper function
 const getYahooSymbol = (symbol, exchange) => {
-  if (symbol.includes(".")) return symbol; // already has suffix like .NS or .BO
+  if (symbol.includes(".")) return symbol;
   if (exchange && exchange.toUpperCase().includes("BSE")) return `${symbol}.BO`;
-  return `${symbol}.NS`; // default to NSE
+  return `${symbol}.NS`;
+};
+
+// ✅ Auto-assign sector based on type and name
+const autoSector = (type, name) => {
+  if (type === "Gold")        return "Gold";
+  if (type === "Cash")        return "Cash";
+  if (type === "FD")          return "Fixed Income";
+  if (type === "MutualFund")  return "Mutual Fund";
+  if (type === "Other")       return "Other";
+
+  // Guess from name for Equity / unknown
+  const n = (name || "").toLowerCase();
+  if (n.includes("gold"))                                              return "Gold";
+  if (n.includes("cash") || n.includes("savings"))                    return "Cash";
+  if (n.includes("fd") || n.includes("fixed deposit") || n.includes("recurring")) return "Fixed Income";
+  if (n.includes("nifty") || n.includes("sensex") || n.includes("index"))         return "Index Fund";
+  if (n.includes("mutual") || n.includes("fund"))                     return "Mutual Fund";
+
+  return "Unknown";
 };
 
 // GET all assets with live prices
@@ -55,16 +73,21 @@ router.get("/", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const { name, type, buy_price, quantity, symbol } = req.body;
-    if (!name || !buy_price || !quantity)
+    if (!name || !buy_price)
       return res.status(400).json({ error: "Missing fields" });
 
+    const sector    = autoSector(type, name);
+    const qty       = quantity || 1;
+    const assetType = type || "Equity";
+
     const result = await pool.query(
-      `INSERT INTO assets (name, type, buy_price, quantity, symbol, current_price)
-       VALUES ($1,$2,$3,$4,$5,$3) RETURNING *`,
-      [name, type || "Equity", buy_price, quantity, symbol || null]
+      `INSERT INTO assets (name, type, buy_price, quantity, symbol, current_price, sector)
+       VALUES ($1,$2,$3,$4,$5,$3,$6) RETURNING *`,
+      [name, assetType, buy_price, qty, symbol || null, sector]
     );
     res.json(result.rows[0]);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Server error" });
   }
 });
@@ -72,13 +95,18 @@ router.post("/", async (req, res) => {
 // PUT update asset
 router.put("/:id", async (req, res) => {
   try {
-    const { name, buy_price, quantity, symbol } = req.body;
+    const { name, type, buy_price, quantity, symbol } = req.body;
+    const sector = autoSector(type, name);
+    const qty    = quantity || 1;
+
     const result = await pool.query(
-      `UPDATE assets SET name=$1, buy_price=$2, quantity=$3, symbol=$4 WHERE id=$5 RETURNING *`,
-      [name, buy_price, quantity, symbol || null, req.params.id]
+      `UPDATE assets SET name=$1, type=$2, buy_price=$3, quantity=$4, symbol=$5, sector=$6
+       WHERE id=$7 RETURNING *`,
+      [name, type || "Equity", buy_price, qty, symbol || null, sector, req.params.id]
     );
     res.json(result.rows[0]);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Server error" });
   }
 });
@@ -103,7 +131,7 @@ router.post("/import-zerodha", upload.single("file"), async (req, res) => {
     const sheet = workbook.Sheets[sheetName];
     const allRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
 
-    // ── Find header row ──────────────────────────────────────────────────
+    // Find header row
     let headerRowIdx = -1;
     let headers = [];
 
@@ -120,7 +148,6 @@ router.post("/import-zerodha", upload.single("file"), async (req, res) => {
       return res.status(400).json({ error: "Could not find header row. Is this a Zerodha holdings file?" });
     }
 
-    // ── Map columns ──────────────────────────────────────────────────────
     const col = (names) => {
       for (const n of names) {
         const idx = headers.findIndex(h => h.toLowerCase().includes(n.toLowerCase()));
@@ -133,13 +160,12 @@ router.post("/import-zerodha", upload.single("file"), async (req, res) => {
     const iQty      = col(["Qty.", "Quantity", "Qty"]);
     const iAvgCost  = col(["Avg. cost", "Avg Cost", "Average Price", "Buy Price"]);
     const iLTP      = col(["LTP", "Last Price", "Current Price", "Mkt Price"]);
-    const iExchange = col(["Exchange", "Exch"]); // ✅ properly detect exchange column
+    const iExchange = col(["Exchange", "Exch"]);
 
     if (iSymbol === -1 || iQty === -1 || iAvgCost === -1) {
       return res.status(400).json({ error: "Required columns not found (Instrument, Qty, Avg Cost)" });
     }
 
-    // ── Process rows ─────────────────────────────────────────────────────
     const dataRows = allRows.slice(headerRowIdx + 1);
     let imported = 0, skipped = 0;
 
@@ -147,8 +173,7 @@ router.post("/import-zerodha", upload.single("file"), async (req, res) => {
       const symbol   = row[iSymbol]   ? String(row[iSymbol]).trim()   : null;
       const qty      = Number(row[iQty]);
       const avg      = Number(row[iAvgCost]);
-      const ltp      = iLTP      !== -1 ? Number(row[iLTP])      : avg;
-      // ✅ Read exchange from column if available, else default to NSE
+      const ltp      = iLTP !== -1 ? Number(row[iLTP]) : avg;
       const exchange = iExchange !== -1 ? String(row[iExchange] || "").trim() : "NSE";
 
       if (!symbol || isNaN(qty) || qty === 0 || isNaN(avg) || avg === 0) {
@@ -158,7 +183,6 @@ router.post("/import-zerodha", upload.single("file"), async (req, res) => {
         skipped++; continue;
       }
 
-      // ✅ Now correctly passes exchange value
       const yahooSymbol = getYahooSymbol(symbol, exchange);
 
       const existing = await pool.query(
@@ -172,9 +196,9 @@ router.post("/import-zerodha", upload.single("file"), async (req, res) => {
         );
       } else {
         await pool.query(
-          `INSERT INTO assets (name, type, buy_price, quantity, symbol, current_price)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [symbol, "Equity", avg, qty, yahooSymbol, ltp || avg]
+          `INSERT INTO assets (name, type, buy_price, quantity, symbol, current_price, sector)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [symbol, "Equity", avg, qty, yahooSymbol, ltp || avg, "Unknown"]
         );
       }
 

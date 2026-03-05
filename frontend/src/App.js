@@ -345,6 +345,7 @@ export default function App() {
   const [editId, setEditId]           = useState(null);
   const [editItemType, setEditItemType] = useState("asset");
   const [type, setType]               = useState("asset");
+  const [assetType, setAssetType]     = useState("Equity"); // Equity | Gold | Cash | FD | MutualFund | Other
   const [name, setName]               = useState("");
   const [value, setValue]             = useState("");
   const [interest, setInterest]       = useState("");
@@ -460,6 +461,7 @@ export default function App() {
     setName(""); setValue(""); setBuyPrice(""); setQuantity("");
     setSymbol(""); setSymbolSearch(""); setSymbolSuggestions([]);
     setShowSuggestions(false); setInterest(""); setTenure("");
+    setAssetType("Equity");
     setEditMode(false); setEditId(null);
   };
 
@@ -486,6 +488,7 @@ export default function App() {
       if (itemType === "asset") {
         setBuyPrice(item.buy_price||""); setQuantity(item.quantity||"");
         setSymbol(item.symbol||""); setSymbolSearch(item.symbol||"");
+        setAssetType(item.type||"Equity");
       } else {
         setValue(item.amount||""); setInterest(item.interest||""); setTenure(item.tenure||"");
       }
@@ -498,17 +501,26 @@ export default function App() {
     try {
       if (editMode) {
         const url  = editItemType==="asset" ? `${API}/assets/${editId}` : `${API}/liabilities/${editId}`;
+        const isStock = assetType === "Equity" || assetType === "MutualFund";
         const body = editItemType==="asset"
-          ? { name, buy_price:Number(buyPrice), quantity:Number(quantity), symbol }
+          ? { name, type:assetType, buy_price:Number(buyPrice), quantity: isStock ? Number(quantity) : 1, symbol: isStock ? symbol : "" }
           : { name, amount:Number(value), interest:Number(interest), tenure:Number(tenure) };
         await fetch(url, { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) });
         showSnack("Updated successfully!");
       } else {
         if (type === "asset") {
-          if (!buyPrice || !quantity) return showSnack("Buy price & quantity required","error");
+          const isStock = assetType === "Equity" || assetType === "MutualFund";
+          if (!buyPrice) return showSnack("Amount/price is required","error");
+          if (isStock && !quantity) return showSnack("Quantity is required for stocks","error");
           await fetch(`${API}/assets`, {
             method:"POST", headers:{"Content-Type":"application/json"},
-            body:JSON.stringify({ name, type:"Equity", buy_price:Number(buyPrice), quantity:Number(quantity), symbol })
+            body:JSON.stringify({
+              name,
+              type: assetType,
+              buy_price: Number(buyPrice),
+              quantity: isStock ? Number(quantity) : 1,
+              symbol: isStock ? symbol : ""
+            })
           });
         } else {
           await fetch(`${API}/liabilities`, {
@@ -1683,16 +1695,48 @@ export default function App() {
       <Dialog open={open} onClose={() => { setOpen(false); resetForm(); }} fullWidth maxWidth="xs">
         <DialogTitle sx={{ fontWeight:700 }}>{editMode ? "✏️ Edit Entry" : "➕ Add Entry"}</DialogTitle>
         <DialogContent sx={{ pt:1 }}>
+
+          {/* Asset or Liability toggle */}
           {!editMode && (
             <ToggleButtonGroup value={type} exclusive onChange={(e,v) => v && setType(v)} fullWidth sx={{ mb:2 }}>
               <ToggleButton value="asset" sx={{ fontWeight:600 }}>Asset</ToggleButton>
               <ToggleButton value="liability" sx={{ fontWeight:600 }}>Liability</ToggleButton>
             </ToggleButtonGroup>
           )}
+
+          {/* Asset type selector */}
+          {((!editMode && type==="asset") || (editMode && editItemType==="asset")) && (
+            <Box sx={{ mb:2 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ mb:1, display:"block", fontWeight:600 }}>
+                Asset Type
+              </Typography>
+              <Box sx={{ display:"flex", flexWrap:"wrap", gap:1 }}>
+                {[
+                  { value:"Equity",     label:"📈 Stock" },
+                  { value:"MutualFund", label:"📊 Mutual Fund" },
+                  { value:"Gold",       label:"🥇 Gold" },
+                  { value:"Cash",       label:"💵 Cash" },
+                  { value:"FD",         label:"🏦 FD / RD" },
+                  { value:"Other",      label:"📦 Other" },
+                ].map(a => (
+                  <Chip key={a.value} label={a.label} onClick={() => setAssetType(a.value)}
+                    sx={{ cursor:"pointer", fontWeight:600,
+                      bgcolor:assetType===a.value?"#6366f1":"#f3f4f6",
+                      color:assetType===a.value?"white":"#374151" }} />
+                ))}
+              </Box>
+            </Box>
+          )}
+
           <TextField label="Name" fullWidth sx={{ mb:2 }} value={name} onChange={e => setName(e.target.value)} />
-          {((!editMode && type==="asset") || (editMode && editItemType==="asset")) && <>
-            <TextField label="Buy Price (₹)" type="number" fullWidth sx={{ mb:2 }} value={buyPrice} onChange={e => setBuyPrice(e.target.value)} />
-            <TextField label="Quantity" type="number" fullWidth sx={{ mb:2 }} value={quantity} onChange={e => setQuantity(e.target.value)} />
+
+          {/* Stock / Mutual Fund fields */}
+          {((!editMode && type==="asset") || (editMode && editItemType==="asset")) &&
+           (assetType === "Equity" || assetType === "MutualFund") && <>
+            <TextField label={assetType==="MutualFund" ? "Buy NAV (₹)" : "Buy Price (₹)"}
+              type="number" fullWidth sx={{ mb:2 }} value={buyPrice} onChange={e => setBuyPrice(e.target.value)} />
+            <TextField label={assetType==="MutualFund" ? "Units" : "Quantity"}
+              type="number" fullWidth sx={{ mb:2 }} value={quantity} onChange={e => setQuantity(e.target.value)} />
             <Box sx={{ position:"relative" }}>
               <TextField label="Stock Symbol (e.g. TCS.NS)" fullWidth value={symbolSearch} autoComplete="off"
                 helperText="Type to search NSE / BSE / US stocks"
@@ -1730,11 +1774,24 @@ export default function App() {
               )}
             </Box>
           </>}
+
+          {/* Gold / Cash / FD / Other — just amount */}
+          {((!editMode && type==="asset") || (editMode && editItemType==="asset")) &&
+           (assetType === "Gold" || assetType === "Cash" || assetType === "FD" || assetType === "Other") && <>
+            <TextField
+              label={assetType==="Gold" ? "Current Value (₹)" : assetType==="FD" ? "FD Amount (₹)" : "Amount (₹)"}
+              type="number" fullWidth sx={{ mb:2 }} value={buyPrice}
+              onChange={e => setBuyPrice(e.target.value)}
+              helperText={assetType==="FD" ? "Principal amount invested" : assetType==="Gold" ? "Total value of gold holdings" : ""} />
+          </>}
+
+          {/* Liability fields */}
           {((!editMode && type==="liability") || (editMode && editItemType==="liability")) && <>
             <TextField label="Loan Amount (₹)" type="number" fullWidth sx={{ mb:2 }} value={value} onChange={e => setValue(e.target.value)} />
             <TextField label="Interest Rate (%)" type="number" fullWidth sx={{ mb:2 }} value={interest} onChange={e => setInterest(e.target.value)} />
             <TextField label="Tenure (Years)" type="number" fullWidth value={tenure} onChange={e => setTenure(e.target.value)} />
           </>}
+
         </DialogContent>
         <DialogActions sx={{ px:3, pb:2 }}>
           <Button onClick={() => { setOpen(false); resetForm(); }}>Cancel</Button>

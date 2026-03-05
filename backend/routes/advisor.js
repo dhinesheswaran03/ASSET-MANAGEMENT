@@ -1,21 +1,49 @@
 const express = require("express");
 const router  = express.Router();
 const pool    = require("../db");
-const { GoogleGenAI } = require("@google/genai");
+const Groq    = require("groq-sdk");
+const axios   = require("axios");
 
-const ai    = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-const MODEL = "gemini-2.5-flash";
+const groq  = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const MODEL = "llama-3.3-70b-versatile";
 
-// ── Build portfolio context for Gemini ────────────────────────────────────
+// ── Fetch live price from Yahoo Finance ───────────────────────────────────
+const getLivePrice = async (symbol) => {
+  try {
+    const res = await axios.get(
+      `https://query2.finance.yahoo.com/v8/finance/chart/${symbol}`,
+      { headers: { "User-Agent": "Mozilla/5.0" }, timeout: 5000 }
+    );
+    const price = res.data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+    return price ? Number(price) : null;
+  } catch {
+    return null;
+  }
+};
+
+// ── Build portfolio context with LIVE prices ──────────────────────────────
 const buildPortfolioContext = async () => {
-  const assetsRes = await pool.query("SELECT * FROM assets ORDER BY current_price * quantity DESC");
+  const assetsRes = await pool.query("SELECT * FROM assets ORDER BY id DESC");
   const liabsRes  = await pool.query("SELECT * FROM liabilities");
   const divsRes   = await pool.query("SELECT COALESCE(SUM(amount),0) as total FROM dividends");
   const histRes   = await pool.query(
     "SELECT * FROM networth_history ORDER BY recorded_at DESC LIMIT 10"
   );
 
-  const assets           = assetsRes.rows;
+  const assets = assetsRes.rows;
+
+  // ✅ Fetch live prices — same as dashboard
+  await Promise.all(
+    assets.map(async (asset) => {
+      if (asset.symbol) {
+        const live = await getLivePrice(asset.symbol);
+        asset.current_price = live || Number(asset.current_price) || Number(asset.buy_price);
+      } else {
+        asset.current_price = Number(asset.current_price) || Number(asset.buy_price);
+      }
+    })
+  );
+
   const liabs            = liabsRes.rows;
   const totalAssets      = assets.reduce((s,a) => s + Number(a.current_price)*Number(a.quantity), 0);
   const totalLiabilities = liabs.reduce((s,l) => s + Number(l.amount), 0);
@@ -24,7 +52,6 @@ const buildPortfolioContext = async () => {
   const totalPL          = totalAssets - totalInvested;
   const plPct            = totalInvested > 0 ? (totalPL/totalInvested)*100 : 0;
 
-  // Sector breakdown
   const sectorMap = {};
   assets.forEach(a => {
     const sector = a.sector || "Unknown";
@@ -32,7 +59,6 @@ const buildPortfolioContext = async () => {
     sectorMap[sector] = (sectorMap[sector] || 0) + val;
   });
 
-  // Drift alerts
   const driftAlerts = assets
     .filter(a => Number(a.target_pct) > 0)
     .map(a => {
@@ -43,7 +69,6 @@ const buildPortfolioContext = async () => {
     })
     .filter(a => Math.abs(a.drift) > 5);
 
-  // Per-stock details
   const stockLines = assets.map(a => {
     const cv     = Number(a.current_price)*Number(a.quantity);
     const inv    = Number(a.buy_price)*Number(a.quantity);
@@ -51,47 +76,46 @@ const buildPortfolioContext = async () => {
     const plP    = inv > 0 ? ((pl/inv)*100).toFixed(1) : "0";
     const allocP = totalAssets > 0 ? (cv/totalAssets*100).toFixed(1) : "0";
     return `• ${a.name} (${a.symbol||"-"}) | Sector: ${a.sector||"Unknown"} | ` +
-           `Qty: ${a.quantity} | Buy: ₹${a.buy_price} | Now: ₹${a.current_price} | ` +
-           `Value: ₹${cv.toFixed(0)} | P&L: ₹${pl.toFixed(0)} (${plP}%) | ` +
+           `Qty: ${a.quantity} | Buy: Rs.${a.buy_price} | Now: Rs.${Number(a.current_price).toFixed(2)} | ` +
+           `Value: Rs.${cv.toFixed(0)} | P&L: Rs.${pl.toFixed(0)} (${plP}%) | ` +
            `Allocation: ${allocP}%${Number(a.target_pct)>0?` | Target: ${a.target_pct}%`:""}`;
   }).join("\n");
 
   const sectorLines = Object.entries(sectorMap)
     .sort((a,b) => b[1]-a[1])
-    .map(([s,v]) => `• ${s}: ₹${v.toFixed(0)} (${(v/totalAssets*100).toFixed(1)}%)`)
+    .map(([s,v]) => `• ${s}: Rs.${v.toFixed(0)} (${(v/totalAssets*100).toFixed(1)}%)`)
     .join("\n");
 
   const liabLines = liabs.length === 0 ? "None"
-    : liabs.map(l => `• ${l.name}: ₹${l.amount} @ ${l.interest}% for ${l.tenure} yrs`).join("\n");
+    : liabs.map(l => `• ${l.name}: Rs.${l.amount} @ ${l.interest}% for ${l.tenure} yrs`).join("\n");
 
   const driftLines = driftAlerts.length === 0 ? "No significant drift"
     : driftAlerts.map(d =>
-        `• ${d.name}: Target ${d.target}% → Actual ${d.actual}% (${Number(d.drift)>0?"+":""}${d.drift}%)`
+        `• ${d.name}: Target ${d.target}% -> Actual ${d.actual}% (${Number(d.drift)>0?"+":""}${d.drift}%)`
       ).join("\n");
 
   const histLines = histRes.rows.length === 0 ? "No history yet"
     : histRes.rows.map(h =>
-        `• ${new Date(h.recorded_at).toLocaleDateString("en-IN")}: ₹${Number(h.net_worth).toFixed(0)}`
+        `• ${new Date(h.recorded_at).toLocaleDateString("en-IN")}: Rs.${Number(h.net_worth).toFixed(0)}`
       ).join("\n");
 
-  return `
-You are an expert Indian stock market portfolio advisor inside WealthTrack, a personal finance app.
-You have full access to the user's live portfolio. Be specific, data-driven, and actionable.
+  return `You are an expert Indian stock market portfolio advisor inside WealthTrack, a personal finance app.
+You have full access to the user's live portfolio with real-time prices. Be specific, data-driven, and actionable.
 Always reference actual numbers from the data. Be friendly but professional.
-Use bullet points where helpful. Keep responses under 250 words unless the user asks for more detail.
+Use bullet points where helpful. Keep responses under 250 words unless asked for more.
 Never say you don't have access to the portfolio — you have all the data below.
-Always respond in plain text, avoid markdown headers or excessive formatting.
+Respond in plain text only, no markdown headers.
 
-=== PORTFOLIO SUMMARY ===
-Net Worth:         ₹${netWorth.toFixed(0)}
-Total Assets:      ₹${totalAssets.toFixed(0)}
-Total Invested:    ₹${totalInvested.toFixed(0)}
-Total P&L:         ₹${totalPL.toFixed(0)} (${plPct.toFixed(1)}%)
-Total Liabilities: ₹${totalLiabilities.toFixed(0)}
-Total Dividends:   ₹${Number(divsRes.rows[0]?.total||0).toFixed(0)}
-Number of stocks:  ${assets.length}
+=== PORTFOLIO SUMMARY (LIVE PRICES) ===
+Net Worth:          Rs.${netWorth.toFixed(0)}
+Total Assets:       Rs.${totalAssets.toFixed(0)}
+Total Invested:     Rs.${totalInvested.toFixed(0)}
+Total P&L:          Rs.${totalPL.toFixed(0)} (${plPct.toFixed(1)}%)
+Total Liabilities:  Rs.${totalLiabilities.toFixed(0)}
+Total Dividends:    Rs.${Number(divsRes.rows[0]?.total||0).toFixed(0)}
+Number of holdings: ${assets.length}
 
-=== HOLDINGS (sorted by value) ===
+=== HOLDINGS (with live prices) ===
 ${stockLines || "No holdings yet"}
 
 === SECTOR ALLOCATION ===
@@ -104,8 +128,7 @@ ${liabLines}
 ${driftLines}
 
 === NET WORTH HISTORY (recent) ===
-${histLines}
-`;
+${histLines}`;
 };
 
 // ── POST /advisor/chat ────────────────────────────────────────────────────
@@ -118,20 +141,20 @@ router.post("/chat", async (req, res) => {
 
     const portfolioContext = await buildPortfolioContext();
 
-    // ✅ New @google/genai SDK — build contents array directly
-    const contents = [
-      // Inject portfolio context as first exchange
-      { role:"user",  parts:[{ text: "Here is my complete portfolio data:\n" + portfolioContext }] },
-      { role:"model", parts:[{ text: "I have full access to your portfolio. I can see all your holdings, P&L, sector allocation, drift alerts, and net worth history. What would you like to know?" }] },
-      // Append full conversation history
-      ...messages.map(m => ({
-        role: m.role === "assistant" ? "model" : "user",
-        parts: [{ text: m.content }]
-      }))
-    ];
+    const completion = await groq.chat.completions.create({
+      model: MODEL,
+      messages: [
+        { role: "system", content: portfolioContext },
+        ...messages.map(m => ({
+          role: m.role === "assistant" ? "assistant" : "user",
+          content: m.content
+        }))
+      ],
+      max_tokens: 1024,
+      temperature: 0.7,
+    });
 
-    const response = await ai.models.generateContent({ model:MODEL, contents });
-    const reply = response.candidates[0].content.parts[0].text;
+    const reply = completion.choices[0]?.message?.content || "Sorry, I could not generate a response.";
     res.json({ reply });
 
   } catch (err) {
@@ -145,31 +168,27 @@ router.get("/quick-insights", async (req, res) => {
   try {
     const portfolioContext = await buildPortfolioContext();
 
-    const prompt = portfolioContext + `
-
-Based on this portfolio, give exactly 4 quick insights as pure JSON only.
-No markdown, no backticks, no preamble — just raw JSON like this:
+    const completion = await groq.chat.completions.create({
+      model: MODEL,
+      messages: [
+        { role: "system", content: portfolioContext },
+        { role: "user", content: `Give exactly 4 quick insights about this portfolio as pure JSON only.
+No markdown, no backticks, no preamble — just raw JSON:
 {
   "insights": [
-    { "type": "positive", "title": "short title max 5 words", "message": "1-2 sentence insight with specific numbers from the portfolio" },
-    { "type": "warning",  "title": "short title max 5 words", "message": "1-2 sentence insight with specific numbers from the portfolio" },
-    { "type": "action",   "title": "short title max 5 words", "message": "1-2 sentence actionable suggestion with specific numbers" },
-    { "type": "info",     "title": "short title max 5 words", "message": "1-2 sentence interesting observation with specific numbers" }
+    { "type": "positive", "title": "short title max 5 words", "message": "1-2 sentence insight with specific numbers" },
+    { "type": "warning",  "title": "short title max 5 words", "message": "1-2 sentence insight with specific numbers" },
+    { "type": "action",   "title": "short title max 5 words", "message": "1-2 sentence actionable suggestion with numbers" },
+    { "type": "info",     "title": "short title max 5 words", "message": "1-2 sentence interesting observation with numbers" }
   ]
-}`;
-
-    // ✅ New @google/genai SDK
-    const response = await ai.models.generateContent({
-      model: MODEL,
-      contents: [{ role:"user", parts:[{ text: prompt }] }]
+}` }
+      ],
+      max_tokens: 1024,
+      temperature: 0.3,
     });
 
-    let text = response.candidates[0].content.parts[0].text.trim();
-
-    // Strip markdown fences if Gemini adds them
+    let text = completion.choices[0]?.message?.content?.trim() || "";
     text = text.replace(/```json|```/g, "").trim();
-
-    // Extract JSON if there's extra text around it
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) text = jsonMatch[0];
 
@@ -178,12 +197,11 @@ No markdown, no backticks, no preamble — just raw JSON like this:
 
   } catch (err) {
     console.error("Quick insights error:", err.message);
-    // Fallback so UI never breaks
     res.json({
       insights: [
         { type:"info",     title:"AI Advisor Ready",     message:"Your portfolio data is loaded. Ask me anything about your investments in the chat below!" },
         { type:"action",   title:"Try Asking",           message:"Click a suggested question or type your own to get personalised advice based on your actual holdings." },
-        { type:"positive", title:"Free AI Analysis",     message:"Powered by Gemini — completely free with no usage limits for personal use." },
+        { type:"positive", title:"Free AI Analysis",     message:"Powered by Groq LLaMA — completely free with 14,400 requests per day." },
         { type:"info",     title:"Refresh For Insights", message:"Click Refresh above to generate real AI insights based on your current portfolio data." }
       ]
     });
