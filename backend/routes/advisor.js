@@ -99,7 +99,7 @@ const buildPortfolioContext = async () => {
         `• ${new Date(h.recorded_at).toLocaleDateString("en-IN")}: Rs.${Number(h.net_worth).toFixed(0)}`
       ).join("\n");
 
-  return `You are an expert Indian stock market portfolio advisor inside WealthTrack, a personal finance app.
+  return `You are an expert Indian stock market portfolio advisor inside FolioX, a personal finance app.
 You have full access to the user's live portfolio with real-time prices. Be specific, data-driven, and actionable.
 Always reference actual numbers from the data. Be friendly but professional.
 Use bullet points where helpful. Keep responses under 250 words unless asked for more.

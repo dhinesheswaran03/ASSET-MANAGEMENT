@@ -64,4 +64,6 @@ require("./jobs/notificationJob");
 
 app.use("/advisor", require("./routes/advisor"));
 
+app.use("/cash", require("./routes/cash"));
+
 app.listen(5000, () => console.log("✅ Server running on port 5000"));

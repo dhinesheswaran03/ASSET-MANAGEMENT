@@ -7,33 +7,55 @@ const pool = require("../db");
 // Save snapshot (called by cron job daily)
 router.post("/snapshot", async (req, res) => {
   try {
-    const a = await pool.query("SELECT COALESCE(SUM(current_price * quantity),0) AS total FROM assets");
-    const l = await pool.query("SELECT COALESCE(SUM(amount),0) AS total FROM liabilities");
-    const totalAssets = Number(a.rows[0].total);
-    const totalLiabilities = Number(l.rows[0].total);
-    const netWorth = totalAssets - totalLiabilities;
+    const assetsResult = await pool.query("SELECT * FROM assets");
+    const assets = assetsResult.rows;
 
-    // Avoid duplicate snapshots on same day
+    const axios = require("axios");
+    const getLivePrice = async (symbol) => {
+      try {
+        const r = await axios.get(
+          `https://query2.finance.yahoo.com/v8/finance/chart/${symbol}`,
+          { headers: { "User-Agent": "Mozilla/5.0" }, timeout: 5000 }
+        );
+        return r.data?.chart?.result?.[0]?.meta?.regularMarketPrice || null;
+      } catch { return null; }
+    };
+
+    await Promise.all(assets.map(async (a) => {
+      if (a.symbol) {
+        const live = await getLivePrice(a.symbol);
+        if (live) a.current_price = live;
+        else a.current_price = Number(a.current_price) || Number(a.buy_price);
+      } else {
+        a.current_price = Number(a.current_price) || Number(a.buy_price);
+      }
+    }));
+
+    const l = await pool.query("SELECT COALESCE(SUM(amount),0) AS total FROM liabilities");
+    const totalAssets      = assets.reduce((s, a) => s + Number(a.current_price) * Number(a.quantity), 0);
+    const totalInvested    = assets.reduce((s, a) => s + Number(a.buy_price) * Number(a.quantity), 0); // ✅ new
+    const totalLiabilities = Number(l.rows[0].total);
+    const netWorth         = totalAssets - totalLiabilities;
+
     const existing = await pool.query(
       "SELECT id FROM networth_history WHERE DATE(recorded_at) = CURRENT_DATE"
     );
     if (existing.rows.length > 0) {
       await pool.query(
-        "UPDATE networth_history SET total_assets=$1, total_liabilities=$2, net_worth=$3 WHERE DATE(recorded_at)=CURRENT_DATE",
-        [totalAssets, totalLiabilities, netWorth]
+        "UPDATE networth_history SET total_assets=$1, total_liabilities=$2, net_worth=$3, total_invested=$4 WHERE DATE(recorded_at)=CURRENT_DATE",
+        [totalAssets, totalLiabilities, netWorth, totalInvested]
       );
     } else {
       await pool.query(
-        "INSERT INTO networth_history (total_assets, total_liabilities, net_worth) VALUES ($1,$2,$3)",
-        [totalAssets, totalLiabilities, netWorth]
+        "INSERT INTO networth_history (total_assets, total_liabilities, net_worth, total_invested) VALUES ($1,$2,$3,$4)",
+        [totalAssets, totalLiabilities, netWorth, totalInvested]
       );
     }
-    res.json({ message: "Snapshot saved", totalAssets, totalLiabilities, netWorth });
+    res.json({ message: "Snapshot saved", totalAssets, totalInvested, totalLiabilities, netWorth });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
 // Get history (last N days)
 router.get("/history", async (req, res) => {
   try {
