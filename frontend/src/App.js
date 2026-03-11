@@ -28,6 +28,10 @@ import GoogleIcon from "@mui/icons-material/Google";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import SendIcon from "@mui/icons-material/Send";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
+import LightModeIcon from "@mui/icons-material/LightMode";
+import TableChartIcon from "@mui/icons-material/TableChart";
+import EditNoteIcon from "@mui/icons-material/EditNote";
 import LightbulbIcon from "@mui/icons-material/Lightbulb";
 import {
   PieChart, Pie, Cell, Tooltip as ReTooltip, ResponsiveContainer,
@@ -52,24 +56,25 @@ const apiFetch = (url, options = {}) => {
 };
 const COLORS = ["#6366f1","#10b981","#f59e0b","#ef4444","#3b82f6","#8b5cf6","#ec4899","#14b8a6","#f97316","#a855f7"];
 
-// ── IndMoney-style design tokens ─────────────────────────────────────────
-const T = {
-  // Colors
+// ── Design tokens — light & dark ──────────────────────────────────────────
+const makeTokens = (dark) => ({
   c: {
-    primary: "#0066FF",       // IndMoney blue
-    gain:    "#00B386",       // Green for profit
-    loss:    "#E5483A",       // Red for loss
-    text1:   "#1A1A2E",       // Primary text
-    text2:   "#6B7280",       // Secondary text
-    text3:   "#9CA3AF",       // Tertiary/label text
-    border:  "#F0F0F0",       // Subtle border
-    bg:      "#F7F8FA",       // Page background
-    card:    "#FFFFFF",       // Card background
-    tag:     "#F5F5F5",       // Tag background
+    primary: "#0066FF",
+    gain:    "#00B386",
+    loss:    "#E5483A",
+    text1:   dark ? "#F1F5F9"  : "#1A1A2E",
+    text2:   dark ? "#94A3B8"  : "#6B7280",
+    text3:   dark ? "#64748B"  : "#9CA3AF",
+    border:  dark ? "#1E293B"  : "#F0F0F0",
+    bg:      dark ? "#0F172A"  : "#F7F8FA",
+    card:    dark ? "#1E293B"  : "#FFFFFF",
+    tag:     dark ? "#334155"  : "#F5F5F5",
+    topbar:  dark ? "#1E293B"  : "#FFFFFF",
+    input:   dark ? "#334155"  : "#FFFFFF",
   },
   shadow: {
-    card:  "0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)",
-    hover: "0 4px 12px rgba(0,0,0,0.10)",
+    card:  dark ? "0 1px 3px rgba(0,0,0,0.4)"  : "0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)",
+    hover: dark ? "0 4px 12px rgba(0,0,0,0.5)" : "0 4px 12px rgba(0,0,0,0.10)",
     hero:  "0 8px 32px rgba(0,102,255,0.18)",
     fab:   "0 4px 16px rgba(0,102,255,0.35)",
   },
@@ -79,7 +84,8 @@ const T = {
     dark:    "linear-gradient(135deg, #1A1A2E 0%, #16213E 100%)",
     success: "linear-gradient(135deg, #00B386 0%, #00966E 100%)",
   },
-};
+});
+// T computed inside App per render
 const SECTORS = ["IT","Banking","Pharma","Auto","FMCG","Energy","Metals","Realty","Infrastructure","Telecom","Finance","Unknown"];
 
 const formatINR = (val) => {
@@ -125,14 +131,14 @@ function LoginPage() {
           ].map((f,i) => (
             <Box key={i} sx={{ display:"flex", alignItems:"center", gap:1.5, mb:1.2, textAlign:"left" }}>
               <Typography sx={{ fontSize:16 }}>{f.icon}</Typography>
-              <Typography sx={{ fontSize:13, color:"#374151" }}>{f.text}</Typography>
+              <Typography sx={{ fontSize:13, color:"#1A1A2E" }}>{f.text}</Typography>
             </Box>
           ))}
           <Button fullWidth variant="contained" size="large"
             startIcon={<GoogleIcon />}
             onClick={() => { window.location.href = `${API}/auth/google`; }}
             sx={{ mt:3, py:1.5, borderRadius:"12px", textTransform:"none",
-              bgcolor:"white", color:"#374151", fontWeight:700, fontSize:15,
+              bgcolor:"white", color:"#1A1A2E", fontWeight:700, fontSize:15,
               border:"1px solid #E5E7EB", boxShadow:"0 2px 8px rgba(0,0,0,0.08)",
               "&:hover":{ bgcolor:"#F9FAFB", boxShadow:"0 4px 16px rgba(0,0,0,0.12)" } }}>
             Continue with Google
@@ -278,7 +284,7 @@ function OnboardingPage({ token, user, onComplete }) {
                   { icon:"⚠️", label:"Drift Alerts",        value:"Daily after market close" },
                 ].map((item,i) => (
                   <Box key={i} sx={{ display:"flex", justifyContent:"space-between",
-                    bgcolor:"#f9fafb", borderRadius:2, p:1.5, mb:1 }}>
+                    bgcolor:"#F7F8FA", borderRadius:2, p:1.5, mb:1 }}>
                     <Typography variant="body2">{item.icon} {item.label}</Typography>
                     <Typography variant="body2" fontWeight={700} sx={{ color:"#6366f1" }}>{item.value}</Typography>
                   </Box>
@@ -394,6 +400,73 @@ export default function App() {
   const [cashTarget, setCashTarget]       = useState("");
   const [cashNotes, setCashNotes]         = useState("");
 
+  // Dark mode
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("foliox_dark") === "true");
+  const T = makeTokens(darkMode);
+  const toggleDark = () => {
+    const next = !darkMode;
+    setDarkMode(next);
+    localStorage.setItem("foliox_dark", String(next));
+  };
+
+  // Bulk edit
+  const [bulkEditOpen, setBulkEditOpen]   = useState(false);
+  const [bulkField, setBulkField]         = useState("sector");
+  const [bulkValue, setBulkValue]         = useState("");
+
+  const handleBulkEdit = async () => {
+    if (!bulkValue || selectedAssets.length === 0) return showSnack("Select assets and a value","error");
+    try {
+      await Promise.all(selectedAssets.map(id => {
+        const endpoint = bulkField === "sector"
+          ? apiFetch(`${API}/assets/${id}/sector`, { method:"PATCH", body:JSON.stringify({ sector:bulkValue }) })
+          : apiFetch(`${API}/assets/${id}/target`, { method:"PATCH", body:JSON.stringify({ target_pct:Number(bulkValue) }) });
+        return endpoint;
+      }));
+      showSnack(`✅ Updated ${selectedAssets.length} assets`);
+      setBulkEditOpen(false); setBulkValue("");
+      setSelectedAssets([]); setSelectMode(false);
+      fetchAll(); fetchAnalytics();
+    } catch { showSnack("Bulk update failed","error"); }
+  };
+
+  // CSV Export
+  const handleCSVExport = () => {
+    const totalAssets = assets.reduce((s,a) => s + Number(a.current_price)*Number(a.quantity), 0);
+    const rows = [
+      ["Name","Symbol","Type","Sector","Qty","Buy Price","Current Price","Invested","Current Value","P&L","P&L %","Allocation %","Target %"],
+      ...assets.map(a => {
+        const invested = Number(a.buy_price)*Number(a.quantity);
+        const current  = Number(a.current_price)*Number(a.quantity);
+        const pl       = current - invested;
+        const plPct    = invested > 0 ? ((pl/invested)*100).toFixed(2) : "0";
+        const alloc    = totalAssets > 0 ? ((current/totalAssets)*100).toFixed(2) : "0";
+        return [
+          a.name, a.symbol||"", a.type||"Equity", a.sector||"Unknown",
+          a.quantity, a.buy_price, a.current_price,
+          invested.toFixed(2), current.toFixed(2),
+          pl.toFixed(2), plPct, alloc, a.target_pct||0
+        ];
+      }),
+      [],
+      ["SUMMARY"],
+      ["Total Invested", assets.reduce((s,a)=>s+Number(a.buy_price)*Number(a.quantity),0).toFixed(2)],
+      ["Total Value",    totalAssets.toFixed(2)],
+      ["Total P&L",      (totalAssets - assets.reduce((s,a)=>s+Number(a.buy_price)*Number(a.quantity),0)).toFixed(2)],
+      ["Liabilities",    liabilities.reduce((s,l)=>s+Number(l.amount),0).toFixed(2)],
+      ["Net Worth",      (totalAssets - liabilities.reduce((s,l)=>s+Number(l.amount),0)).toFixed(2)],
+      [],
+      ["Exported on", new Date().toLocaleString("en-IN")],
+    ];
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type:"text/csv" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = `FolioX_Portfolio_${new Date().toISOString().split("T")[0]}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+    showSnack("📥 CSV exported!");
+  };
+
   // AI Advisor
   const [aiOpen, setAiOpen]               = useState(false);
   const [chatMessages, setChatMessages]   = useState([]);
@@ -421,6 +494,14 @@ export default function App() {
   const [showSuggestions, setShowSuggestions]   = useState(false);
 
   const fileInputRef = useRef(null);
+
+  // PWA install prompt
+  const [pwaInstallable, setPwaInstallable] = useState(false);
+  useEffect(() => {
+    const handler = () => setPwaInstallable(true);
+    window.addEventListener("pwa-installable", handler);
+    return () => window.removeEventListener("pwa-installable", handler);
+  }, []);
 
   useEffect(() => {
     if (authState === "app") { fetchAll(); fetchUnreadCount(); fetchProfile(); fetchCash(); }
@@ -677,18 +758,7 @@ export default function App() {
     setChatLoading(false);
   };
 
-  const exportCSV = () => {
-    const rows = [
-      ["Type","Name","Buy Price","Qty","Current Value","Symbol","Interest","Tenure"],
-      ...assets.map(a => ["Asset",a.name,a.buy_price,a.quantity,(a.current_price*a.quantity).toFixed(2),a.symbol||"","",""]),
-      ...liabilities.map(l => ["Liability",l.name,l.amount,"","","",(l.interest||""),l.tenure||""])
-    ];
-    const csv  = rows.map(r => r.join(",")).join("\n");
-    const blob = new Blob([csv],{type:"text/csv"});
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-    a.download = "portfolio.csv"; a.click();
-    showSnack("CSV exported!"); setExportAnchor(null);
-  };
+  const exportCSV = () => { handleCSVExport(); setExportAnchor(null); };
 
   const exportPDF = () => {
     const win = window.open("","_blank");
@@ -747,7 +817,7 @@ export default function App() {
       <Box sx={{ textAlign:"center", color:"white" }}>
         <AccountBalanceWalletIcon sx={{ fontSize:60, mb:2 }} />
         <Typography variant="h5" fontWeight={900} sx={{ letterSpacing:-0.5 }}>
-          <Box component="span" sx={{ color:"#1f2937" }}>Folio</Box>
+          <Box component="span" sx={{ color:T.c.text1 }}>Folio</Box>
           <Box component="span" sx={{ color:"#6366f1" }}>X</Box>
         </Typography>
         <LinearProgress sx={{ mt:2, width:200, mx:"auto", borderRadius:2,
@@ -929,7 +999,7 @@ export default function App() {
               <Typography fontWeight={700} sx={{ mb:0.5 }}>{l.name}</Typography>
               <Box sx={{ display:"flex", gap:1, mb:1 }}>
                 <Chip label="Loan" size="small" sx={{ bgcolor:"#fef2f2", color:"#ef4444", fontWeight:600 }} />
-                <Chip label={`${lpct}% of debt`} size="small" sx={{ bgcolor:"#f3f4f6" }} />
+                <Chip label={`${lpct}% of debt`} size="small" sx={{ bgcolor:T.c.tag }} />
               </Box>
               {l.interest > 0 && <Typography variant="body2" color="text.secondary">{l.interest}% p.a. · {l.tenure} yrs</Typography>}
               {emi > 0 && <>
@@ -937,7 +1007,7 @@ export default function App() {
                 <Typography variant="body2" color="text.secondary">Total Interest: {formatINR(totalInt)}</Typography>
               </>}
               <LinearProgress variant="determinate" value={Math.min(Number(lpct),100)}
-                sx={{ mt:1.5, borderRadius:2, height:5, bgcolor:"#f3f4f6",
+                sx={{ mt:1.5, borderRadius:2, height:5, bgcolor:T.c.tag,
                   "& .MuiLinearProgress-bar":{ bgcolor:"#ef4444" } }} />
             </Box>
             <Box sx={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:1 }}>
@@ -1062,7 +1132,7 @@ export default function App() {
         </Card>
 
         {/* Sector Allocation */}
-        <Card sx={{ mb:3, borderRadius:3 }}>
+        <Card sx={{ mb:3, borderRadius:3, bgcolor:T.c.card }}>
           <CardContent>
             <Box sx={{ display:"flex", justifyContent:"space-between", alignItems:"center", mb:1 }}>
               <Typography variant="subtitle1" fontWeight={700}>🏭 Sector Allocation</Typography>
@@ -1108,7 +1178,7 @@ export default function App() {
         </Card>
 
         {/* Target Allocation */}
-        <Card sx={{ mb:3, borderRadius:3 }}>
+        <Card sx={{ mb:3, borderRadius:3, bgcolor:T.c.card }}>
           <CardContent>
             <Typography variant="subtitle1" fontWeight={700} sx={{ mb:1.5 }}>🎯 Target vs Actual Allocation</Typography>
             {assets.filter(a => Number(a.target_pct) > 0).length === 0 ? (
@@ -1133,7 +1203,7 @@ export default function App() {
                       <Typography variant="caption" color="text.secondary">·</Typography>
                       <Typography variant="caption" color="text.secondary">Target {a.target_pct}%</Typography>
                     </Box>
-                    <Box sx={{ position:"relative", height:8, bgcolor:"#f3f4f6", borderRadius:4 }}>
+                    <Box sx={{ position:"relative", height:8, bgcolor:T.c.tag, borderRadius:4 }}>
                       <Box sx={{ position:"absolute", height:"100%", borderRadius:4, bgcolor:"#6366f1", width:`${Math.min(actual,100)}%` }} />
                       <Box sx={{ position:"absolute", top:"-3px", height:14, width:2, bgcolor:"#f59e0b", left:`${Math.min(a.target_pct,100)}%` }} />
                     </Box>
@@ -1249,7 +1319,7 @@ export default function App() {
         </Card>
 
         {/* Quick Insights */}
-        <Card sx={{ mb:3, borderRadius:3 }}>
+        <Card sx={{ mb:3, borderRadius:3, bgcolor:T.c.card }}>
           <CardContent>
             <Box sx={{ display:"flex", justifyContent:"space-between", alignItems:"center", mb:2 }}>
               <Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
@@ -1264,7 +1334,7 @@ export default function App() {
             </Box>
             {insightsLoading ? (
               <Box>{[1,2,3,4].map(i => (
-                <Box key={i} sx={{ mb:1.5, p:1.5, bgcolor:"#f9fafb", borderRadius:2 }}>
+                <Box key={i} sx={{ mb:1.5, p:1.5, bgcolor:T.c.bg, borderRadius:2 }}>
                   <LinearProgress sx={{ borderRadius:2, mb:1 }} />
                   <LinearProgress sx={{ borderRadius:2, width:"60%" }} />
                 </Box>
@@ -1296,7 +1366,7 @@ export default function App() {
         {/* Chat */}
         <Card sx={{ borderRadius:3, mb:3 }}>
           <CardContent sx={{ p:0 }}>
-            <Box sx={{ p:2, borderBottom:"1px solid #f3f4f6" }}>
+            <Box sx={{ p:2, borderBottom:`1px solid ${T.c.border}` }}>
               <Typography variant="subtitle1" fontWeight={700}>💬 Ask Your Advisor</Typography>
             </Box>
             <Box sx={{ height:380, overflowY:"auto", p:2 }}>
@@ -1335,7 +1405,7 @@ export default function App() {
                         <Avatar sx={{ bgcolor:"#e5e7eb", width:28, height:28, ml:1, mt:0.5, flexShrink:0 }}>
                           {currentUser?.avatar
                             ? <Box component="img" src={currentUser.avatar} sx={{ width:28, height:28, borderRadius:"50%" }} />
-                            : <Typography sx={{ fontSize:12, fontWeight:700, color:"#6b7280" }}>
+                            : <Typography sx={{ fontSize:12, fontWeight:700, color:T.c.text2 }}>
                                 {currentUser?.name?.charAt(0)||"U"}
                               </Typography>
                           }
@@ -1348,7 +1418,7 @@ export default function App() {
                       <Avatar sx={{ bgcolor:"#6366f1", width:28, height:28 }}>
                         <SmartToyIcon sx={{ fontSize:16 }} />
                       </Avatar>
-                      <Box sx={{ p:1.5, bgcolor:"#f9fafb", border:"1px solid #e5e7eb", borderRadius:2 }}>
+                      <Box sx={{ p:1.5, bgcolor:T.c.bg, border:"1px solid #e5e7eb", borderRadius:2 }}>
                         <Box sx={{ display:"flex", gap:0.5, alignItems:"center" }}>
                           {[0,1,2].map(i => (
                             <Box key={i} sx={{ width:6, height:6, borderRadius:"50%", bgcolor:"#6366f1",
@@ -1366,7 +1436,7 @@ export default function App() {
                 </>
               )}
             </Box>
-            <Box sx={{ p:2, borderTop:"1px solid #f3f4f6", display:"flex", gap:1 }}>
+            <Box sx={{ p:2, borderTop:`1px solid ${T.c.border}`, display:"flex", gap:1 }}>
               <TextField fullWidth size="small" placeholder="Ask about your portfolio..."
                 value={chatInput}
                 onChange={e => setChatInput(e.target.value)}
@@ -1375,14 +1445,14 @@ export default function App() {
               <IconButton onClick={sendChatMessage} disabled={!chatInput.trim()||chatLoading}
                 sx={{ bgcolor:"#6366f1", color:"white", borderRadius:2, px:2,
                   "&:hover":{ bgcolor:"#4f46e5" },
-                  "&:disabled":{ bgcolor:"#e5e7eb", color:"#9ca3af" } }}>
+                  "&:disabled":{ bgcolor:"#e5e7eb", color:T.c.text3 } }}>
                 <SendIcon fontSize="small" />
               </IconButton>
             </Box>
             {chatMessages.length > 0 && (
               <Box sx={{ px:2, pb:1.5 }}>
                 <Button size="small" onClick={() => setChatMessages([])}
-                  sx={{ color:"#9ca3af", fontSize:11 }}>Clear conversation</Button>
+                  sx={{ color:T.c.text3, fontSize:11 }}>Clear conversation</Button>
               </Box>
             )}
           </CardContent>
@@ -1432,7 +1502,7 @@ export default function App() {
 
     const CashCard = ({ item }) => (
       <Box sx={{ display:"flex", justifyContent:"space-between", alignItems:"center",
-        p:1.5, mb:1, borderRadius:2, bgcolor:"#f9fafb", border:"1px solid #e5e7eb" }}>
+        p:1.5, mb:1, borderRadius:2, bgcolor:T.c.bg, border:"1px solid #e5e7eb" }}>
         <Box>
           <Typography variant="body2" fontWeight={700}>{item.name}</Typography>
           {item.notes && <Typography variant="caption" color="text.secondary">{item.notes}</Typography>}
@@ -1597,7 +1667,8 @@ export default function App() {
     <Box sx={{ background:"#F7F8FA", minHeight:"100vh" }}>
 
       {/* Top Bar */}
-      <Paper elevation={0} sx={{ position:"sticky", top:0, zIndex:100, borderBottom:"1px solid #F0F0F0", bgcolor:"#FFFFFF" }}>
+      <Paper elevation={0} sx={{ position:"sticky", top:0, zIndex:100,
+        borderBottom:`1px solid ${T.c.border}`, bgcolor:T.c.topbar }}>
         <Box sx={{ display:"flex", alignItems:"center", justifyContent:"space-between", px:2, py:1.5 }}>
           <Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
             <Box sx={{ display:"flex", alignItems:"center", justifyContent:"center",
@@ -1606,17 +1677,29 @@ export default function App() {
               <Typography sx={{ color:"white", fontWeight:900, fontSize:16, letterSpacing:-1 }}>F</Typography>
             </Box>
             <Typography variant="h6" fontWeight={900} sx={{ letterSpacing:-0.5 }}>
-              <Box component="span" sx={{ color:"#1f2937" }}>Folio</Box>
+              <Box component="span" sx={{ color:T.c.text1 }}>Folio</Box>
               <Box component="span" sx={{ color:T.c.primary }}>X</Box>
             </Typography>
           </Box>
           <Box sx={{ display:"flex", gap:0.5, alignItems:"center" }}>
             <input type="file" accept=".xlsx,.csv" ref={fileInputRef} style={{ display:"none" }} onChange={handleZerodhaImport} />
-            <Tooltip title="Import Zerodha"><IconButton size="small" onClick={() => fileInputRef.current.click()}><UploadFileIcon /></IconButton></Tooltip>
-            <Tooltip title="Refresh prices"><IconButton size="small" onClick={fetchAll} disabled={loading}><RefreshIcon /></IconButton></Tooltip>
-            <Tooltip title="Export"><IconButton size="small" onClick={e => setExportAnchor(e.currentTarget)}><DownloadIcon /></IconButton></Tooltip>
+            <Tooltip title="Import Zerodha"><IconButton size="small" onClick={() => fileInputRef.current.click()} sx={{ color:T.c.text2 }}><UploadFileIcon /></IconButton></Tooltip>
+            <Tooltip title="Refresh prices"><IconButton size="small" onClick={fetchAll} disabled={loading} sx={{ color:T.c.text2 }}><RefreshIcon /></IconButton></Tooltip>
+            <Tooltip title="Export CSV"><IconButton size="small" onClick={e => setExportAnchor(e.currentTarget)} sx={{ color:T.c.text2 }}><DownloadIcon /></IconButton></Tooltip>
+            {pwaInstallable && (
+              <Tooltip title="Install FolioX app">
+                <Chip label="Install App" size="small" onClick={() => window.installPWA?.()}
+                  sx={{ bgcolor:T.c.primary, color:"white", fontWeight:700, fontSize:11,
+                    height:26, cursor:"pointer", display:{ xs:"none", sm:"flex" } }} />
+              </Tooltip>
+            )}
+            <Tooltip title={darkMode ? "Light mode" : "Dark mode"}>
+              <IconButton size="small" onClick={toggleDark} sx={{ color:T.c.text2 }}>
+                {darkMode ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
+              </IconButton>
+            </Tooltip>
             <Tooltip title="Notifications">
-              <IconButton size="small" onClick={() => { fetchNotifications(); setNotifOpen(true); }}>
+              <IconButton size="small" onClick={() => { fetchNotifications(); setNotifOpen(true); }} sx={{ color:T.c.text2 }}>
                 <Badge badgeContent={unreadCount} color="error" max={9}>
                   <NotificationsIcon />
                 </Badge>
@@ -1625,11 +1708,11 @@ export default function App() {
             <Tooltip title="Profile">
               <IconButton size="small" onClick={() => setProfileOpen(true)}
                 sx={{ p:0.3, overflow:"hidden", width:34, height:34, borderRadius:"50%",
-                  border:"2px solid #6366f1", boxSizing:"border-box" }}>
+                  border:`2px solid ${T.c.primary}`, boxSizing:"border-box" }}>
                 {currentUser?.avatar
                   ? <Box component="img" src={currentUser.avatar} alt="avatar"
                       sx={{ width:"100%", height:"100%", borderRadius:"50%", objectFit:"cover", display:"block" }} />
-                  : <Avatar sx={{ width:28, height:28, bgcolor:"#6366f1", fontSize:13, fontWeight:700 }}>
+                  : <Avatar sx={{ width:28, height:28, bgcolor:T.c.primary, fontSize:13, fontWeight:700 }}>
                       {(currentUser?.name||profile.name)?.charAt(0)?.toUpperCase()||"U"}
                     </Avatar>
                 }
@@ -1638,21 +1721,22 @@ export default function App() {
           </Box>
         </Box>
         {loading && <LinearProgress sx={{ height:2 }} />}
-        <Box sx={{ display:"flex", borderTop:"1px solid #f3f4f6", overflowX:"auto" }}>
+        <Box sx={{ display:"flex", borderTop:`1px solid ${T.c.border}`, overflowX:"auto" }}>
           {["dashboard","assets","liabilities","analytics","cash"].map(tab => (
             <Button key={tab} onClick={() => setActiveTab(tab)}
               sx={{ flex:1, py:1.2, borderRadius:0, textTransform:"capitalize", fontWeight:600, fontSize:12,
-                color:activeTab===tab?"#0066FF":"#9CA3AF",
-                borderBottom:activeTab===tab?"2px solid #0066FF":"2px solid transparent",
+                color:activeTab===tab ? T.c.primary : T.c.text3,
+                borderBottom:activeTab===tab?`2px solid ${T.c.primary}`:"2px solid transparent",
                 background:"transparent", transition:"color 0.15s ease",
-                "&:hover":{ color:"#0066FF", background:"transparent" } }}>
+                "&:hover":{ color:T.c.primary, background:"transparent" } }}>
               {tab === "cash" ? "Cash" : tab}
             </Button>
           ))}
         </Box>
       </Paper>
 
-      <Menu anchorEl={exportAnchor} open={Boolean(exportAnchor)} onClose={() => setExportAnchor(null)}>
+      <Menu anchorEl={exportAnchor} open={Boolean(exportAnchor)} onClose={() => setExportAnchor(null)}
+        PaperProps={{ sx:{ bgcolor:T.c.card, border:`1px solid ${T.c.border}` } }}>
         <MenuItem onClick={exportCSV}>📊 Export CSV</MenuItem>
         <MenuItem onClick={exportPDF}>📄 Export PDF</MenuItem>
       </Menu>
@@ -1695,7 +1779,7 @@ export default function App() {
             <Grid item xs={6}><StatCard icon={<AccountBalanceIcon />} label="Invested" value={formatINR(totalInvested)} sub="cost basis" color={T.c.primary} bg="#EEF4FF" /></Grid>
           </Grid>
           {assets.length > 0 && (
-            <Card sx={{ mb:3, borderRadius:3 }}>
+            <Card sx={{ mb:3, borderRadius:3, bgcolor:T.c.card }}>
               <CardContent>
                 <Typography variant="subtitle1" fontWeight={700} sx={{ mb:1 }}>Portfolio Allocation</Typography>
                 <ResponsiveContainer width="100%" height={220}>
@@ -1757,8 +1841,8 @@ export default function App() {
 
             {/* Bulk action bar */}
             <Collapse in={selectMode}>
-              <Box sx={{ mt:1.5, p:1.5, borderRadius:"10px", bgcolor:"#F7F8FA",
-                border:"1px solid #E8E8F0",
+              <Box sx={{ mt:1.5, p:1.5, borderRadius:"10px", bgcolor:T.c.bg,
+                border:`1px solid ${T.c.border}`,
                 display:"flex", alignItems:"center", gap:1.5 }}>
                 <Checkbox
                   size="small"
@@ -1766,16 +1850,21 @@ export default function App() {
                   indeterminate={selectedAssets.length > 0 && selectedAssets.length < assets.length}
                   onChange={e => setSelectedAssets(e.target.checked ? assets.map(a => a.id) : [])}
                   sx={{ p:0.5, color:T.c.primary, "&.Mui-checked":{ color:T.c.primary }, "&.MuiCheckbox-indeterminate":{ color:T.c.primary } }} />
-                <Typography variant="body2" fontWeight={700} sx={{ color:"#374151", flex:1 }}>
+                <Typography variant="body2" fontWeight={700} sx={{ color:T.c.text1, flex:1 }}>
                   {selectedAssets.length > 0 ? `${selectedAssets.length} selected` : "Select all"}
                 </Typography>
-                {selectedAssets.length > 0 && (
+                {selectedAssets.length > 0 && <>
+                  <Button size="small" variant="outlined" onClick={() => setBulkEditOpen(true)}
+                    sx={{ borderColor:T.c.primary, color:T.c.primary, fontWeight:600,
+                      borderRadius:"8px", fontSize:11 }}>
+                    ✏️ Edit {selectedAssets.length}
+                  </Button>
                   <Button size="small" variant="contained" onClick={handleBulkDelete}
                     sx={{ bgcolor:T.c.loss, "&:hover":{ bgcolor:"#C53A2F" }, fontWeight:600,
                       borderRadius:"8px", fontSize:11 }}>
                     🗑 Delete {selectedAssets.length}
                   </Button>
-                )}
+                </>}
               </Box>
             </Collapse>
           </Box>
@@ -1858,19 +1947,19 @@ export default function App() {
         {/* Quick Insights horizontal scroll */}
         {quickInsights.length > 0 && (
           <Box sx={{ px:1.5, pt:1.5, display:"flex", gap:1, overflowX:"auto",
-            pb:1, borderBottom:"1px solid #f3f4f6",
+            pb:1, borderBottom:`1px solid ${T.c.border}`,
             "&::-webkit-scrollbar":{ display:"none" } }}>
             {quickInsights.map((ins,i) => {
               const CMAP = { positive:"#10b981", warning:"#f59e0b", action:"#6366f1", info:"#8b5cf6" };
               const IMAP = { positive:"✅", warning:"⚠️", action:"🎯", info:"💡" };
               return (
                 <Box key={i} sx={{ minWidth:160, p:1.2, borderRadius:2, flexShrink:0,
-                  bgcolor:"#f9fafb", border:"1px solid #e5e7eb" }}>
+                  bgcolor:T.c.bg, border:"1px solid #e5e7eb" }}>
                   <Typography variant="caption" fontWeight={700}
                     sx={{ color:CMAP[ins.type]||"#6366f1", display:"block", mb:0.3 }}>
                     {IMAP[ins.type]||"💡"} {ins.title}
                   </Typography>
-                  <Typography variant="caption" sx={{ color:"#6b7280", fontSize:10, lineHeight:1.4 }}>
+                  <Typography variant="caption" sx={{ color:T.c.text2, fontSize:10, lineHeight:1.4 }}>
                     {ins.message}
                   </Typography>
                 </Box>
@@ -1925,7 +2014,7 @@ export default function App() {
                     <Avatar sx={{ bgcolor:"#e5e7eb", width:28, height:28, ml:1, mt:0.5, flexShrink:0 }}>
                       {currentUser?.avatar
                         ? <Box component="img" src={currentUser.avatar} sx={{ width:28, height:28, borderRadius:"50%" }} />
-                        : <Typography sx={{ fontSize:12, fontWeight:700, color:"#6b7280" }}>
+                        : <Typography sx={{ fontSize:12, fontWeight:700, color:T.c.text2 }}>
                             {currentUser?.name?.charAt(0)||"U"}
                           </Typography>
                       }
@@ -1938,7 +2027,7 @@ export default function App() {
                   <Avatar sx={{ bgcolor:"#6366f1", width:28, height:28 }}>
                     <SmartToyIcon sx={{ fontSize:16 }} />
                   </Avatar>
-                  <Box sx={{ p:1.5, bgcolor:"#f9fafb", border:"1px solid #e5e7eb", borderRadius:2 }}>
+                  <Box sx={{ p:1.5, bgcolor:T.c.bg, border:"1px solid #e5e7eb", borderRadius:2 }}>
                     <Box sx={{ display:"flex", gap:0.5 }}>
                       {[0,1,2].map(i => (
                         <Box key={i} sx={{ width:6, height:6, borderRadius:"50%", bgcolor:"#6366f1",
@@ -1961,7 +2050,7 @@ export default function App() {
         <Box sx={{ p:2, borderTop:"1px solid rgba(99,102,241,0.08)", display:"flex", flexDirection:"column", gap:1, bgcolor:"#fafafa" }}>
           {chatMessages.length > 0 && (
             <Button size="small" onClick={() => setChatMessages([])}
-              sx={{ color:"#9ca3af", fontSize:11, alignSelf:"flex-start", p:0 }}>
+              sx={{ color:T.c.text3, fontSize:11, alignSelf:"flex-start", p:0 }}>
               Clear conversation
             </Button>
           )}
@@ -1975,7 +2064,7 @@ export default function App() {
               sx={{ background:T.grad.primary, color:"white", borderRadius:"12px", width:42, height:42,
                 boxShadow:"0 4px 12px rgba(99,102,241,0.35)",
                 "&:hover":{ background:"linear-gradient(135deg,#4f46e5,#7c3aed)", transform:"scale(1.05)" },
-                "&:disabled":{ bgcolor:"#e5e7eb", color:"#9ca3af", boxShadow:"none", transform:"none" },
+                "&:disabled":{ bgcolor:"#e5e7eb", color:T.c.text3, boxShadow:"none", transform:"none" },
                 transition:"all 0.2s ease" }}>
               <SendIcon fontSize="small" />
             </IconButton>
@@ -2034,7 +2123,7 @@ export default function App() {
                         <Tooltip title="Delete">
                           <IconButton size="small" sx={{ p:0.3 }}
                             onClick={async () => { await apiFetch(`${API}/notifications/${n.id}`,{method:"DELETE"}); fetchNotifications(); }}>
-                            <DeleteIcon sx={{ fontSize:16, color:"#9ca3af" }} />
+                            <DeleteIcon sx={{ fontSize:16, color:T.c.text3 }} />
                           </IconButton>
                         </Tooltip>
                       </Box>
@@ -2042,7 +2131,7 @@ export default function App() {
                     <Typography variant="caption" color="text.secondary" sx={{ display:"block", mt:0.5, lineHeight:1.5 }}>
                       {n.message}
                     </Typography>
-                    <Typography variant="caption" sx={{ color:"#9ca3af", fontSize:10, mt:0.5, display:"block" }}>
+                    <Typography variant="caption" sx={{ color:T.c.text3, fontSize:10, mt:0.5, display:"block" }}>
                       {new Date(n.created_at).toLocaleString("en-IN",{dateStyle:"short",timeStyle:"short"})}
                     </Typography>
                   </Box>
@@ -2082,7 +2171,7 @@ export default function App() {
             )}
           </Box>
           <Box sx={{ flex:1, overflowY:"auto", p:2.5 }}>
-            <Typography variant="subtitle2" fontWeight={700} sx={{ mb:2, color:"#374151" }}>👤 Personal Info</Typography>
+            <Typography variant="subtitle2" fontWeight={700} sx={{ mb:2, color:T.c.text1 }}>👤 Personal Info</Typography>
             <TextField label="Name" fullWidth sx={{ mb:2 }} value={profileEdit.name}
               onChange={e => setProfileEdit(p => ({...p, name:e.target.value}))} />
             <TextField label="Email" fullWidth sx={{ mb:2 }} value={profileEdit.email}
@@ -2090,7 +2179,7 @@ export default function App() {
             <TextField label="Phone" fullWidth sx={{ mb:3 }} value={profileEdit.phone}
               onChange={e => setProfileEdit(p => ({...p, phone:e.target.value}))} />
             <Divider sx={{ mb:2 }} />
-            <Typography variant="subtitle2" fontWeight={700} sx={{ mb:2, color:"#374151" }}>🔔 Alert Settings</Typography>
+            <Typography variant="subtitle2" fontWeight={700} sx={{ mb:2, color:T.c.text1 }}>🔔 Alert Settings</Typography>
             <TextField label="Net Worth Milestone (₹)" type="number" fullWidth sx={{ mb:2 }}
               value={profileEdit.networth_milestone}
               helperText="Get notified when net worth crosses this amount"
@@ -2100,7 +2189,7 @@ export default function App() {
               helperText="Get notified when portfolio gain/loss crosses this %"
               onChange={e => setProfileEdit(p => ({...p, pl_alert_pct:e.target.value}))} />
             <Divider sx={{ mb:2 }} />
-            <Typography variant="subtitle2" fontWeight={700} sx={{ mb:1.5, color:"#374151" }}>📋 Notification Schedule</Typography>
+            <Typography variant="subtitle2" fontWeight={700} sx={{ mb:1.5, color:T.c.text1 }}>📋 Notification Schedule</Typography>
             <Box sx={{ bgcolor:"#f5f3ff", borderRadius:2, p:1.5, mb:1 }}>
               <Typography variant="body2" fontWeight={600} sx={{ color:"#6366f1" }}>📋 Weekly Digest</Typography>
               <Typography variant="caption" color="text.secondary">Every Monday at 9:00 AM IST</Typography>
@@ -2164,7 +2253,7 @@ export default function App() {
             </Box>
           )}
 
-          <TextField label="Name" fullWidth sx={{ mb:2 }} value={name} onChange={e => setName(e.target.value)} />
+          <TextField label="Name" fullWidth sx={{ mb:2, "& .MuiInputBase-root":{ bgcolor:T.c.input, color:T.c.text1 }, "& .MuiInputLabel-root":{ color:T.c.text2 } }} value={name} onChange={e => setName(e.target.value)} />
 
           {/* Stock / Mutual Fund fields */}
           {((!editMode && type==="asset") || (editMode && editItemType==="asset")) &&
@@ -2194,7 +2283,7 @@ export default function App() {
                   boxShadow:"0 8px 24px rgba(0,0,0,0.12)" }}>
                   {symbolSuggestions.map((s,i) => (
                     <Box key={i} onMouseDown={() => { setSymbol(s.symbol); setSymbolSearch(s.symbol); setShowSuggestions(false); }}
-                      sx={{ px:2, py:1.2, cursor:"pointer", borderBottom:"1px solid #f3f4f6",
+                      sx={{ px:2, py:1.2, cursor:"pointer", borderBottom:`1px solid ${T.c.border}`,
                         "&:hover":{ bgcolor:"#f5f3ff" }, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                       <Box>
                         <Typography variant="body2" fontWeight={700} sx={{ color:"#6366f1" }}>{s.symbol}</Typography>
@@ -2240,7 +2329,7 @@ export default function App() {
 
       {/* Dividend Dialog */}
       <Dialog open={divOpen} onClose={() => setDivOpen(false)} fullWidth maxWidth="xs">
-        <DialogTitle sx={{ fontWeight:700 }}>💰 Log Dividend</DialogTitle>
+        <DialogTitle sx={{ fontWeight:700, color:T.c.text1 }}>💰 Log Dividend</DialogTitle>
         <DialogContent sx={{ pt:1 }}>
           <FormControl fullWidth sx={{ mb:2 }}>
             <InputLabel>Stock</InputLabel>
@@ -2262,7 +2351,7 @@ export default function App() {
 
       {/* Target Dialog */}
       <Dialog open={targetOpen} onClose={() => setTargetOpen(false)} fullWidth maxWidth="xs">
-        <DialogTitle sx={{ fontWeight:700 }}>🎯 Set Target Allocation</DialogTitle>
+        <DialogTitle sx={{ fontWeight:700, color:T.c.text1 }}>🎯 Set Target Allocation</DialogTitle>
         <DialogContent sx={{ pt:1 }}>
           <Typography variant="body2" color="text.secondary" sx={{ mb:2 }}>
             Set desired portfolio weight for <strong>{targetAsset?.name}</strong>
@@ -2280,7 +2369,7 @@ export default function App() {
 
       {/* Sector Dialog */}
       <Dialog open={sectorOpen} onClose={() => setSectorOpen(false)} fullWidth maxWidth="xs">
-        <DialogTitle sx={{ fontWeight:700 }}>🏭 Set Sector</DialogTitle>
+        <DialogTitle sx={{ fontWeight:700, color:T.c.text1 }}>🏭 Set Sector</DialogTitle>
         <DialogContent sx={{ pt:1 }}>
           <Typography variant="body2" color="text.secondary" sx={{ mb:2 }}>
             Assign sector for <strong>{sectorEditAsset?.name}</strong>
@@ -2301,7 +2390,7 @@ export default function App() {
 
       {/* Cash Dialog — outside CashTab to prevent re-render focus loss */}
       <Dialog open={cashOpen} onClose={() => setCashOpen(false)} fullWidth maxWidth="xs">
-        <DialogTitle sx={{ fontWeight:700 }}>
+        <DialogTitle sx={{ fontWeight:700, color:T.c.text1 }}>
           {cashEditMode ? "✏️ Edit" : cashCategory==="liquid" ? "💵 Add Liquid Cash" : "🛡️ Add Emergency Fund"}
         </DialogTitle>
         <DialogContent sx={{ pt:1 }}>
@@ -2333,6 +2422,49 @@ export default function App() {
       </Dialog>
 
       {/* Snackbar */}
+      {/* ── Bulk Edit Dialog ────────────────────────────────────── */}
+      <Dialog open={bulkEditOpen} onClose={() => setBulkEditOpen(false)} fullWidth maxWidth="xs"
+        PaperProps={{ sx:{ borderRadius:"16px", bgcolor:T.c.card } }}>
+        <DialogTitle sx={{ fontWeight:700, color:T.c.text1 }}>
+          ✏️ Bulk Edit {selectedAssets.length} Assets
+        </DialogTitle>
+        <DialogContent>
+          <Typography sx={{ fontSize:13, color:T.c.text2, mb:2 }}>
+            Apply the same value to all selected assets at once.
+          </Typography>
+          <FormControl fullWidth sx={{ mb:2 }}>
+            <InputLabel>Field to Edit</InputLabel>
+            <Select value={bulkField} label="Field to Edit" onChange={e => { setBulkField(e.target.value); setBulkValue(""); }}
+              sx={{ bgcolor:T.c.input, color:T.c.text1 }}>
+              <MenuItem value="sector">Sector</MenuItem>
+              <MenuItem value="target">Target Allocation (%)</MenuItem>
+            </Select>
+          </FormControl>
+          {bulkField === "sector"
+            ? <FormControl fullWidth>
+                <InputLabel>Sector</InputLabel>
+                <Select value={bulkValue} label="Sector" onChange={e => setBulkValue(e.target.value)}
+                  sx={{ bgcolor:T.c.input, color:T.c.text1 }}>
+                  {["IT","Banking","Finance","Pharma","Healthcare","Auto","FMCG","Energy","Metals","Infrastructure","Realty","Telecom","Chemicals","Consumer","Index Fund","Mutual Fund","Gold","Fixed Income","Cash","Other"].map(s =>
+                    <MenuItem key={s} value={s}>{s}</MenuItem>
+                  )}
+                </Select>
+              </FormControl>
+            : <TextField fullWidth label="Target %" type="number" value={bulkValue}
+                onChange={e => setBulkValue(e.target.value)}
+                helperText="e.g. 10 means 10% of portfolio"
+                InputProps={{ sx:{ bgcolor:T.c.input, color:T.c.text1 } }} />
+          }
+        </DialogContent>
+        <DialogActions sx={{ px:3, pb:2 }}>
+          <Button onClick={() => setBulkEditOpen(false)} sx={{ color:T.c.text2 }}>Cancel</Button>
+          <Button variant="contained" onClick={handleBulkEdit}
+            sx={{ bgcolor:T.c.primary, fontWeight:700, borderRadius:"8px" }}>
+            Apply to {selectedAssets.length} assets
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Snackbar open={snack.open} autoHideDuration={3000} onClose={() => setSnack(s => ({...s,open:false}))}
         anchorOrigin={{ vertical:"bottom", horizontal:"center" }}>
         <Alert severity={snack.severity} variant="filled" sx={{ borderRadius:2 }}>{snack.msg}</Alert>

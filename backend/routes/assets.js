@@ -26,34 +26,7 @@ const getYahooSymbol = (symbol, exchange) => {
   return `${symbol}.NS`;
 };
 
-const autoSector = (type, name) => {
-  if (type === "Gold")       return "Gold";
-  if (type === "Cash")       return "Cash";
-  if (type === "FD")         return "Fixed Income";
-  if (type === "MutualFund") return "Mutual Fund";
-  if (type === "Other")      return "Other";
-  const n = (name || "").toLowerCase();
-  if (n.includes("bank") || n.includes("banking"))                          return "Banking";
-  if (n.includes("finance") || n.includes("finserv") || n.includes("capital") || n.includes("credit")) return "Finance";
-  if (n.includes("pharma") || n.includes("drug") || n.includes("medic") || n.includes("lab"))          return "Pharma";
-  if (n.includes("hospital") || n.includes("health") || n.includes("clinic") || n.includes("diagnostic")) return "Healthcare";
-  if (n.includes("tech") || n.includes("software") || n.includes("digital") || n.includes("infosy"))   return "IT";
-  if (n.includes("auto") || n.includes("motor") || n.includes("vehicle") || n.includes("tyre"))        return "Auto";
-  if (n.includes("steel") || n.includes("metal") || n.includes("alumin") || n.includes("copper"))      return "Metals";
-  if (n.includes("cement") || n.includes("construction") || n.includes("engineer") || n.includes("infra")) return "Infrastructure";
-  if (n.includes("power") || n.includes("energy") || n.includes("oil") || n.includes("gas") || n.includes("petro") || n.includes("coal")) return "Energy";
-  if (n.includes("telecom") || n.includes("airtel") || n.includes("tower"))                            return "Telecom";
-  if (n.includes("fmcg") || n.includes("food") || n.includes("beverage") || n.includes("paint") || n.includes("soap")) return "FMCG";
-  if (n.includes("realty") || n.includes("real estate") || n.includes("property") || n.includes("housing")) return "Realty";
-  if (n.includes("chemical") || n.includes("agro") || n.includes("pesticide") || n.includes("fertilizer")) return "Chemicals";
-  if (n.includes("retail") || n.includes("fashion") || n.includes("jewel") || n.includes("apparel"))   return "Consumer";
-  if (n.includes("gold") || n.includes("sgb"))                             return "Gold";
-  if (n.includes("nifty") || n.includes("sensex") || n.includes("index") || n.includes("etf") || n.includes("bees")) return "Index Fund";
-  if (n.includes("mutual") || n.includes("fund"))                          return "Mutual Fund";
-  if (n.includes("fd") || n.includes("fixed deposit") || n.includes("bond") || n.includes("debenture")) return "Fixed Income";
-  if (n.includes("cash") || n.includes("savings") || n.includes("liquid")) return "Cash";
-  return "Unknown";
-};
+const { getSector } = require("../utils/sectorMap");
 
 // GET — only this user's assets
 router.get("/", async (req, res) => {
@@ -79,7 +52,7 @@ router.post("/", async (req, res) => {
   try {
     const { name, type, buy_price, quantity, symbol } = req.body;
     if (!name || !buy_price) return res.status(400).json({ error: "Missing fields" });
-    const sector = autoSector(type, name);
+    const sector = getSector(type, name, symbol||"");
     const result = await pool.query(
       `INSERT INTO assets (name,type,buy_price,quantity,symbol,current_price,sector,user_id)
        VALUES ($1,$2,$3,$4,$5,$3,$6,$7) RETURNING *`,
@@ -93,7 +66,7 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const { name, type, buy_price, quantity, symbol } = req.body;
-    const sector = autoSector(type, name);
+    const sector = getSector(type, name, symbol||"");
     const result = await pool.query(
       `UPDATE assets SET name=$1,type=$2,buy_price=$3,quantity=$4,symbol=$5,sector=$6
        WHERE id=$7 AND user_id=$8 RETURNING *`,
@@ -198,7 +171,7 @@ router.post("/import-zerodha", upload.single("file"), async (req, res) => {
           [avg, qty, ltp||avg, ySym, req.userId]);
       } else {
         await pool.query(`INSERT INTO assets (name,type,buy_price,quantity,symbol,current_price,sector,user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-          [symbol,"Equity",avg,qty,ySym,ltp||avg,"Unknown",req.userId]);
+          [symbol,"Equity",avg,qty,ySym,ltp||avg,getSector("Equity",symbol,ySym),req.userId]);
       }
       imported++;
     }
