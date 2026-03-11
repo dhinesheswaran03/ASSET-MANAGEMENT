@@ -5,7 +5,7 @@ import {
   ToggleButton, ToggleButtonGroup, Chip, IconButton, Avatar,
   LinearProgress, Menu, MenuItem, Tooltip, Snackbar, Alert,
   Grid, Paper, Select, FormControl, InputLabel, Table,
-  TableBody, TableCell, TableHead, TableRow, Badge, Drawer, Divider
+  TableBody, TableCell, TableHead, TableRow, Badge, Drawer, Divider, Checkbox, Collapse
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
@@ -36,7 +36,50 @@ import {
 } from "recharts";
 
 const API = "http://localhost:5000";
+
+// ── Authenticated fetch helper ─────────────────────────────────────────────
+const apiFetch = (url, options = {}) => {
+  const token = localStorage.getItem("foliox_token") || localStorage.getItem("wt_token");
+  const isFormData = options.body instanceof FormData;
+  return fetch(url, {
+    ...options,
+    headers: {
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    },
+  });
+};
 const COLORS = ["#6366f1","#10b981","#f59e0b","#ef4444","#3b82f6","#8b5cf6","#ec4899","#14b8a6","#f97316","#a855f7"];
+
+// ── IndMoney-style design tokens ─────────────────────────────────────────
+const T = {
+  // Colors
+  c: {
+    primary: "#0066FF",       // IndMoney blue
+    gain:    "#00B386",       // Green for profit
+    loss:    "#E5483A",       // Red for loss
+    text1:   "#1A1A2E",       // Primary text
+    text2:   "#6B7280",       // Secondary text
+    text3:   "#9CA3AF",       // Tertiary/label text
+    border:  "#F0F0F0",       // Subtle border
+    bg:      "#F7F8FA",       // Page background
+    card:    "#FFFFFF",       // Card background
+    tag:     "#F5F5F5",       // Tag background
+  },
+  shadow: {
+    card:  "0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)",
+    hover: "0 4px 12px rgba(0,0,0,0.10)",
+    hero:  "0 8px 32px rgba(0,102,255,0.18)",
+    fab:   "0 4px 16px rgba(0,102,255,0.35)",
+  },
+  radius: { card:"12px", chip:"6px", fab:"14px" },
+  grad: {
+    primary: "linear-gradient(135deg, #0066FF 0%, #0052CC 100%)",
+    dark:    "linear-gradient(135deg, #1A1A2E 0%, #16213E 100%)",
+    success: "linear-gradient(135deg, #00B386 0%, #00966E 100%)",
+  },
+};
 const SECTORS = ["IT","Banking","Pharma","Auto","FMCG","Energy","Metals","Realty","Infrastructure","Telecom","Finance","Unknown"];
 
 const formatINR = (val) => {
@@ -57,41 +100,45 @@ const NOTIF_COLORS = {
 // ── Login Page ─────────────────────────────────────────────────────────────
 function LoginPage() {
   return (
-    <Box sx={{
-      minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center",
-      background:"linear-gradient(135deg,#6366f1 0%,#8b5cf6 50%,#a855f7 100%)"
-    }}>
-      <Card sx={{ borderRadius:4, p:2, maxWidth:400, width:"90%", textAlign:"center",
-        boxShadow:"0 25px 60px rgba(0,0,0,0.2)" }}>
+    <Box sx={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center",
+      background:"#F7F8FA" }}>
+      <Card sx={{ borderRadius:"20px", maxWidth:400, width:"90%", textAlign:"center",
+        boxShadow:"0 8px 40px rgba(0,0,0,0.10)", border:"1px solid #F0F0F0" }}>
         <CardContent sx={{ p:4 }}>
-          <Avatar sx={{ bgcolor:"#6366f1", width:72, height:72, mx:"auto", mb:2 }}>
-            <AccountBalanceWalletIcon sx={{ fontSize:40 }} />
-          </Avatar>
-          <Typography variant="h4" fontWeight={900} sx={{ color:"#6366f1", mb:0.5 }}>WealthTrack</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb:4 }}>
+          <Box sx={{ display:"flex", alignItems:"center", justifyContent:"center", gap:1.5, mb:3 }}>
+            <Box sx={{ width:44, height:44, borderRadius:"12px", bgcolor:"#0066FF",
+              display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <Typography sx={{ color:"white", fontWeight:900, fontSize:20 }}>F</Typography>
+            </Box>
+            <Typography sx={{ fontSize:26, fontWeight:800, color:"#1A1A2E", letterSpacing:"-1px" }}>
+              Folio<Box component="span" sx={{ color:"#0066FF" }}>X</Box>
+            </Typography>
+          </Box>
+          <Typography sx={{ fontSize:14, color:"#6B7280", mb:3.5 }}>
             Your personal portfolio & net worth tracker
           </Typography>
           {[
-            "📈 Track stocks & net worth in real-time",
-            "🏭 Sector allocation & drift alerts",
-            "💰 Dividend tracker & P&L analytics",
-            "🤖 AI Portfolio Advisor powered by Gemini",
+            { icon:"📈", text:"Real-time stock & net worth tracking" },
+            { icon:"🏭", text:"Sector allocation & drift alerts" },
+            { icon:"💰", text:"Dividend tracker & P&L analytics" },
+            { icon:"🤖", text:"AI Portfolio Advisor" },
           ].map((f,i) => (
-            <Box key={i} sx={{ display:"flex", alignItems:"center", mb:1.5, textAlign:"left" }}>
-              <Typography variant="body2" sx={{ color:"#374151" }}>{f}</Typography>
+            <Box key={i} sx={{ display:"flex", alignItems:"center", gap:1.5, mb:1.2, textAlign:"left" }}>
+              <Typography sx={{ fontSize:16 }}>{f.icon}</Typography>
+              <Typography sx={{ fontSize:13, color:"#374151" }}>{f.text}</Typography>
             </Box>
           ))}
           <Button fullWidth variant="contained" size="large"
             startIcon={<GoogleIcon />}
-            onClick={() => window.location.href = `${API}/auth/google`}
-            sx={{ mt:3, py:1.5, borderRadius:3, textTransform:"none",
-              bgcolor:"white", color:"#374151", fontWeight:700, fontSize:16,
-              border:"1px solid #e5e7eb", boxShadow:"0 2px 8px rgba(0,0,0,0.1)",
-              "&:hover":{ bgcolor:"#f9fafb", boxShadow:"0 4px 16px rgba(0,0,0,0.15)" } }}>
+            onClick={() => { window.location.href = `${API}/auth/google`; }}
+            sx={{ mt:3, py:1.5, borderRadius:"12px", textTransform:"none",
+              bgcolor:"white", color:"#374151", fontWeight:700, fontSize:15,
+              border:"1px solid #E5E7EB", boxShadow:"0 2px 8px rgba(0,0,0,0.08)",
+              "&:hover":{ bgcolor:"#F9FAFB", boxShadow:"0 4px 16px rgba(0,0,0,0.12)" } }}>
             Continue with Google
           </Button>
-          <Typography variant="caption" color="text.secondary" sx={{ display:"block", mt:2 }}>
-            Your data is private and secure 🔒
+          <Typography sx={{ fontSize:11, color:"#9CA3AF", mt:2 }}>
+            🔒 Your data is private and secure
           </Typography>
         </CardContent>
       </Card>
@@ -122,7 +169,7 @@ function OnboardingPage({ token, user, onComplete }) {
 
   const handleFinish = async () => {
     try {
-      await fetch(`${API}/auth/complete-onboarding`, {
+      await apiFetch(`${API}/auth/complete-onboarding`, {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ token, networth_milestone:Number(milestone), pl_alert_pct:Number(plAlert), phone })
       });
@@ -161,8 +208,8 @@ function OnboardingPage({ token, user, onComplete }) {
               <Typography variant="h5" fontWeight={800} sx={{ color:"#6366f1", mb:1 }}>
                 Welcome, {user?.name?.split(" ")[0]}! 👋
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb:3 }}>
-                Let's set up your WealthTrack account in just 2 steps.
+              <Typography variant="body2" color="text.secondary" sx={{ mb:2 }}>
+                Let's set up your FolioX account in just 2 steps.
               </Typography>
               <Box sx={{ bgcolor:"#f5f3ff", borderRadius:2, p:2, mb:3, textAlign:"left" }}>
                 <Typography variant="body2" fontWeight={600} sx={{ color:"#6366f1" }}>✅ Signed in as</Typography>
@@ -179,7 +226,7 @@ function OnboardingPage({ token, user, onComplete }) {
           {step === 1 && (
             <Box>
               <Typography variant="h6" fontWeight={800} sx={{ mb:0.5 }}>🔔 Set Your Alerts</Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb:3 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb:2 }}>
                 We'll notify you when these thresholds are crossed.
               </Typography>
               <Typography variant="subtitle2" fontWeight={700} sx={{ mb:1 }}>🎯 Net Worth Milestone</Typography>
@@ -242,7 +289,7 @@ function OnboardingPage({ token, user, onComplete }) {
                   sx={{ borderColor:"#6366f1", color:"#6366f1", borderRadius:3, fontWeight:700 }}>Back</Button>
                 <Button fullWidth variant="contained" size="large" onClick={handleFinish}
                   sx={{ bgcolor:"#6366f1", borderRadius:3, fontWeight:700, py:1.5, "&:hover":{ bgcolor:"#4f46e5" } }}>
-                  🚀 Enter WealthTrack
+                  🚀 Enter FolioX
                 </Button>
               </Box>
             </Box>
@@ -267,9 +314,10 @@ export default function App() {
     const onboarded = params.get("onboarded");
 
     if (token) {
+      localStorage.setItem("foliox_token", token);
       localStorage.setItem("wt_token", token);
       window.history.replaceState({}, "", "/");
-      fetch(`${API}/auth/me`, { headers:{ Authorization:`Bearer ${token}` } })
+      apiFetch(`${API}/auth/me`, { headers:{ Authorization:`Bearer ${token}` } })
         .then(r => r.json()).then(user => {
           setCurrentUser(user); setAuthToken(token);
           setAuthState(onboarded === "false" ? "onboarding" : "app");
@@ -278,7 +326,7 @@ export default function App() {
     }
     const saved = localStorage.getItem("wt_token");
     if (saved) {
-      fetch(`${API}/auth/me`, { headers:{ Authorization:`Bearer ${saved}` } })
+      apiFetch(`${API}/auth/me`, { headers:{ Authorization:`Bearer ${saved}` } })
         .then(r => { if (r.ok) return r.json(); throw new Error("bad"); })
         .then(user => {
           setCurrentUser(user); setAuthToken(saved);
@@ -286,6 +334,7 @@ export default function App() {
         }).catch(() => { localStorage.removeItem("wt_token"); setAuthState("login"); });
     } else {
       setAuthState("login");
+    localStorage.removeItem("foliox_token");
     }
   }, []);
 
@@ -296,6 +345,8 @@ export default function App() {
 
   // Portfolio data
   const [assets, setAssets]           = useState([]);
+  const [selectedAssets, setSelectedAssets] = useState([]);
+  const [selectMode, setSelectMode]     = useState(false);
   const [liabilities, setLiabilities] = useState([]);
   const [networth, setNetworth]       = useState({ totalAssets:0, totalLiabilities:0, netWorth:0 });
   const [open, setOpen]               = useState(false);
@@ -331,6 +382,18 @@ export default function App() {
   const [sectorEditVal, setSectorEditVal]     = useState("");
   const [sectorOpen, setSectorOpen]           = useState(false);
 
+  // Cash holdings
+  const [cashHoldings, setCashHoldings]   = useState([]);
+  const [cashSummary, setCashSummary]     = useState({ liquid:{total:0,target:0}, emergency:{total:0,target:0} });
+  const [cashOpen, setCashOpen]           = useState(false);
+  const [cashEditMode, setCashEditMode]   = useState(false);
+  const [cashEditId, setCashEditId]       = useState(null);
+  const [cashName, setCashName]           = useState("");
+  const [cashCategory, setCashCategory]   = useState("liquid");
+  const [cashAmount, setCashAmount]       = useState("");
+  const [cashTarget, setCashTarget]       = useState("");
+  const [cashNotes, setCashNotes]         = useState("");
+
   // AI Advisor
   const [aiOpen, setAiOpen]               = useState(false);
   const [chatMessages, setChatMessages]   = useState([]);
@@ -360,7 +423,7 @@ export default function App() {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    if (authState === "app") { fetchAll(); fetchUnreadCount(); fetchProfile(); }
+    if (authState === "app") { fetchAll(); fetchUnreadCount(); fetchProfile(); fetchCash(); }
   }, [authState]);
 
   useEffect(() => {
@@ -376,12 +439,27 @@ export default function App() {
   }, [chatMessages]);
 
   // ── Data fetchers ──────────────────────────────────────────────────────
+  const fetchCash = async () => {
+    try {
+      const h = await apiFetch(`${API}/cash`).then(r => r.json());
+      const holdings = Array.isArray(h) ? h : [];
+      setCashHoldings(holdings);
+      // Compute summary locally from holdings
+      const liquid    = holdings.filter(x => x.category === "liquid");
+      const emergency = holdings.filter(x => x.category === "emergency");
+      setCashSummary({
+        liquid:    { total: liquid.reduce((s,x)=>s+Number(x.amount),0),    target: liquid.reduce((s,x)=>s+Number(x.target_amount||0),0) },
+        emergency: { total: emergency.reduce((s,x)=>s+Number(x.amount),0), target: emergency.reduce((s,x)=>s+Number(x.target_amount||0),0) },
+      });
+    } catch(e) { console.error("fetchCash error", e); }
+  };
+
   const fetchAll = async () => {
     setLoading(true);
     try {
       const [a, l] = await Promise.all([
-        fetch(`${API}/assets`).then(r => r.json()),
-        fetch(`${API}/liabilities`).then(r => r.json()),
+        apiFetch(`${API}/assets`).then(r => r.json()),
+        apiFetch(`${API}/liabilities`).then(r => r.json()),
       ]);
       const aArr = Array.isArray(a) ? a : [];
       const lArr = Array.isArray(l) ? l : [];
@@ -396,9 +474,9 @@ export default function App() {
   const fetchAnalytics = async () => {
     try {
       const [h, s, d] = await Promise.all([
-        fetch(`${API}/analytics/history?days=${historyDays}`).then(r => r.json()),
-        fetch(`${API}/analytics/sectors`).then(r => r.json()),
-        fetch(`${API}/analytics/dividends`).then(r => r.json()),
+        apiFetch(`${API}/analytics/networth-history?days=${historyDays}`).then(r => r.json()),
+        apiFetch(`${API}/analytics/sector-data`).then(r => r.json()),
+        apiFetch(`${API}/analytics/dividend-data`).then(r => r.json()),
       ]);
       setHistory(Array.isArray(h) ? h : []);
       setSectors(Array.isArray(s) ? s : []);
@@ -408,7 +486,7 @@ export default function App() {
 
   const fetchUnreadCount = async () => {
     try {
-      const res = await fetch(`${API}/notifications/unread-count`);
+      const res = await apiFetch(`${API}/analytics/notifications/unread-count`);
       const data = await res.json();
       setUnreadCount(data.count || 0);
     } catch {}
@@ -416,7 +494,7 @@ export default function App() {
 
   const fetchNotifications = async () => {
     try {
-      const res = await fetch(`${API}/notifications`);
+      const res = await apiFetch(`${API}/analytics/notifications`);
       const data = await res.json();
       setNotifications(Array.isArray(data) ? data : []);
       fetchUnreadCount();
@@ -425,7 +503,7 @@ export default function App() {
 
   const fetchProfile = async () => {
     try {
-      const res = await fetch(`${API}/notifications/profile`);
+      const res = await apiFetch(`${API}/profile`);
       const data = await res.json();
       setProfile(data);
       setProfileEdit({ name:data.name||"", email:data.email||"", phone:data.phone||"",
@@ -436,7 +514,7 @@ export default function App() {
   const fetchQuickInsights = async () => {
     setInsightsLoading(true);
     try {
-      const res  = await fetch(`${API}/advisor/quick-insights`);
+      const res  = await apiFetch(`${API}/advisor/quick-insights`);
       const data = await res.json();
       setQuickInsights(data.insights || []);
     } catch {}
@@ -446,7 +524,7 @@ export default function App() {
   // ── Handlers ──────────────────────────────────────────────────────────
   const handleSaveProfile = async () => {
     try {
-      await fetch(`${API}/notifications/profile`, {
+      await apiFetch(`${API}/notifications/profile`, {
         method:"PUT", headers:{"Content-Type":"application/json"},
         body: JSON.stringify(profileEdit)
       });
@@ -470,7 +548,7 @@ export default function App() {
     const formData = new FormData(); formData.append("file", file);
     try {
       showSnack("Importing holdings...", "info");
-      const res  = await fetch(`${API}/assets/import-zerodha`, { method:"POST", body:formData });
+      const res  = await apiFetch(`${API}/assets/import-zerodha`, { method:"POST", body:formData });
       const data = await res.json();
       if (data.imported !== undefined) {
         showSnack(`✅ Imported ${data.imported} holdings! (${data.skipped} skipped)`, "success");
@@ -505,14 +583,14 @@ export default function App() {
         const body = editItemType==="asset"
           ? { name, type:assetType, buy_price:Number(buyPrice), quantity: isStock ? Number(quantity) : 1, symbol: isStock ? symbol : "" }
           : { name, amount:Number(value), interest:Number(interest), tenure:Number(tenure) };
-        await fetch(url, { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) });
+        await apiFetch(url, { method:"PUT", body:JSON.stringify(body) });
         showSnack("Updated successfully!");
       } else {
         if (type === "asset") {
           const isStock = assetType === "Equity" || assetType === "MutualFund";
           if (!buyPrice) return showSnack("Amount/price is required","error");
           if (isStock && !quantity) return showSnack("Quantity is required for stocks","error");
-          await fetch(`${API}/assets`, {
+          await apiFetch(`${API}/assets`, {
             method:"POST", headers:{"Content-Type":"application/json"},
             body:JSON.stringify({
               name,
@@ -523,7 +601,7 @@ export default function App() {
             })
           });
         } else {
-          await fetch(`${API}/liabilities`, {
+          await apiFetch(`${API}/liabilities`, {
             method:"POST", headers:{"Content-Type":"application/json"},
             body:JSON.stringify({ name, amount:Number(value), interest:Number(interest), tenure:Number(tenure) })
           });
@@ -534,17 +612,25 @@ export default function App() {
     } catch { showSnack("Something went wrong","error"); }
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedAssets.length === 0) return;
+    if (!window.confirm(`Delete ${selectedAssets.length} selected asset(s)?`)) return;
+    await Promise.all(selectedAssets.map(id => apiFetch(`${API}/assets/${id}`, { method:"DELETE" })));
+    showSnack(`Deleted ${selectedAssets.length} assets`);
+    setSelectedAssets([]); setSelectMode(false); fetchAll();
+  };
+
   const handleDelete = async (endpoint, id) => {
-    await fetch(`${API}/${endpoint}/${id}`, { method:"DELETE" });
+    await apiFetch(`${API}/${endpoint}/${id}`, { method:"DELETE" });
     showSnack("Deleted"); fetchAll();
   };
 
   const handleAddDividend = async () => {
     if (!divAssetId || !divAmount || !divDate) return showSnack("Fill all fields","error");
     try {
-      await fetch(`${API}/analytics/dividends`, {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({ asset_id:Number(divAssetId), amount:Number(divAmount), received_date:divDate, notes:divNotes })
+      await apiFetch(`${API}/dividends`, {
+        method:"POST",
+        body:JSON.stringify({ asset_name:divAssetId, amount:Number(divAmount), received_date:divDate, notes:divNotes })
       });
       showSnack("Dividend added!"); setDivOpen(false); setDivAssetId(""); setDivAmount(""); setDivNotes("");
       fetchAnalytics();
@@ -554,8 +640,8 @@ export default function App() {
   const handleUpdateTarget = async () => {
     if (!targetAsset) return;
     try {
-      await fetch(`${API}/analytics/target/${targetAsset.id}`, {
-        method:"PUT", headers:{"Content-Type":"application/json"},
+      await apiFetch(`${API}/assets/${targetAsset.id}/target`, {
+        method:"PATCH",
         body:JSON.stringify({ target_pct:Number(targetPct) })
       });
       showSnack("Target updated!"); setTargetOpen(false); fetchAll();
@@ -565,8 +651,8 @@ export default function App() {
   const handleUpdateSector = async () => {
     if (!sectorEditAsset) return;
     try {
-      await fetch(`${API}/analytics/sector/${sectorEditAsset.id}`, {
-        method:"PUT", headers:{"Content-Type":"application/json"},
+      await apiFetch(`${API}/assets/${sectorEditAsset.id}/sector`, {
+        method:"PATCH",
         body:JSON.stringify({ sector:sectorEditVal })
       });
       showSnack("Sector updated!"); setSectorOpen(false); fetchAll(); fetchAnalytics();
@@ -579,7 +665,7 @@ export default function App() {
     const newMessages = [...chatMessages, userMsg];
     setChatMessages(newMessages); setChatInput(""); setChatLoading(true);
     try {
-      const res  = await fetch(`${API}/advisor/chat`, {
+      const res  = await apiFetch(`${API}/advisor/chat`, {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ messages: newMessages })
       });
@@ -660,7 +746,10 @@ export default function App() {
       background:"linear-gradient(135deg,#6366f1,#8b5cf6)" }}>
       <Box sx={{ textAlign:"center", color:"white" }}>
         <AccountBalanceWalletIcon sx={{ fontSize:60, mb:2 }} />
-        <Typography variant="h5" fontWeight={800}>WealthTrack</Typography>
+        <Typography variant="h5" fontWeight={900} sx={{ letterSpacing:-0.5 }}>
+          <Box component="span" sx={{ color:"#1f2937" }}>Folio</Box>
+          <Box component="span" sx={{ color:"#6366f1" }}>X</Box>
+        </Typography>
         <LinearProgress sx={{ mt:2, width:200, mx:"auto", borderRadius:2,
           bgcolor:"rgba(255,255,255,0.2)", "& .MuiLinearProgress-bar":{ bgcolor:"white" } }} />
       </Box>
@@ -676,93 +765,152 @@ export default function App() {
   );
 
   // ── Sub-components ─────────────────────────────────────────────────────
-  const StatCard = ({ icon, label, value, sub, color="#6366f1", bg="#f5f3ff" }) => (
-    <Card sx={{ borderRadius:3, border:"1px solid #e5e7eb" }}>
-      <CardContent>
-        <Box sx={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
-          <Box>
-            <Typography variant="caption" color="text.secondary" sx={{ fontWeight:600, letterSpacing:0.5 }}>{label}</Typography>
-            <Typography variant="h5" fontWeight={800} sx={{ color, mt:0.5 }}>{value}</Typography>
-            {sub && <Typography variant="caption" color="text.secondary">{sub}</Typography>}
+  const StatCard = ({ icon, label, value, sub, color=T.c.primary, bg="#EEF4FF" }) => (
+    <Card sx={{ borderRadius:T.radius.card, border:`1px solid ${T.c.border}`,
+      bgcolor:T.c.card, boxShadow:T.shadow.card,
+      transition:"box-shadow 0.15s",
+      "&:hover":{ boxShadow:T.shadow.hover } }}>
+      <CardContent sx={{ p:2, "&:last-child":{ pb:2 } }}>
+        <Box sx={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <Box sx={{ flex:1 }}>
+            <Typography sx={{ fontSize:10, fontWeight:600, color:T.c.text3,
+              textTransform:"uppercase", letterSpacing:"0.8px", mb:0.5 }}>{label}</Typography>
+            <Typography sx={{ fontSize:18, fontWeight:700, color:T.c.text1, lineHeight:1.2 }}>{value}</Typography>
+            {sub && <Typography sx={{ fontSize:11, color:T.c.text2, mt:0.3 }}>{sub}</Typography>}
           </Box>
-          <Avatar sx={{ bgcolor:bg, color, width:44, height:44 }}>{icon}</Avatar>
+          <Box sx={{ width:38, height:38, borderRadius:"10px", bgcolor:bg,
+            display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <Box sx={{ color, "& svg":{ fontSize:18 } }}>{icon}</Box>
+          </Box>
         </Box>
       </CardContent>
     </Card>
   );
 
   const AssetCard = ({ a }) => {
-    const invested = a.buy_price * a.quantity;
-    const cv       = a.current_price * a.quantity;
-    const profit   = cv - invested;
-    const pct      = invested > 0 ? ((profit/invested)*100).toFixed(1) : 0;
-    const ppct     = networth.totalAssets > 0 ? ((cv/networth.totalAssets)*100).toFixed(1) : 0;
-    const drift    = a.target_pct > 0 ? (Number(ppct) - Number(a.target_pct)).toFixed(1) : null;
+    const invested   = a.buy_price * a.quantity;
+    const cv         = a.current_price * a.quantity;
+    const profit     = cv - invested;
+    const pct        = invested > 0 ? ((profit/invested)*100).toFixed(1) : 0;
+    const ppct       = networth.totalAssets > 0 ? ((cv/networth.totalAssets)*100).toFixed(1) : 0;
+    const drift      = a.target_pct > 0 ? (Number(ppct) - Number(a.target_pct)).toFixed(1) : null;
+    const isSelected = selectedAssets.includes(a.id);
+    const isProfit   = profit >= 0;
+    const plColor    = isProfit ? T.c.gain : T.c.loss;
+    const typeEmoji  = { Gold:"🥇", Cash:"💵", FD:"🏦", MutualFund:"📊", Equity:"📈", Other:"📦" };
+
     return (
-      <Card sx={{ mb:2, borderRadius:3, border:"1px solid #e5e7eb" }}>
-        <CardContent>
-          <Box sx={{ display:"flex", justifyContent:"space-between" }}>
-            <Box sx={{ flex:1 }}>
-              <Box sx={{ display:"flex", gap:1, mb:0.5, alignItems:"center", flexWrap:"wrap" }}>
-                <Typography fontWeight={700}>{a.name}</Typography>
-                {a.symbol && <Chip label={a.symbol} size="small" sx={{ bgcolor:"#ede9fe", color:"#6366f1", fontWeight:600, fontSize:11 }} />}
-                {a.sector && a.sector !== "Unknown" && <Chip label={a.sector} size="small" sx={{ bgcolor:"#f0fdf4", color:"#16a34a", fontSize:11 }} />}
-              </Box>
-              <Box sx={{ display:"flex", gap:1, mb:1, flexWrap:"wrap" }}>
-                <Chip label={a.type||"Equity"} size="small" variant="outlined" />
-                <Chip label={`${ppct}% of portfolio`} size="small" sx={{ bgcolor:"#f3f4f6" }} />
-                {drift !== null && (
-                  <Chip label={`${drift>0?"▲":"▼"} ${Math.abs(drift)}% drift`} size="small"
-                    sx={{ bgcolor:Math.abs(drift)>5?"#fef2f2":"#fffbeb",
-                      color:Math.abs(drift)>5?"#ef4444":"#f59e0b", fontWeight:600 }} />
+      <Card
+        onClick={selectMode ? () => setSelectedAssets(prev =>
+          isSelected ? prev.filter(id=>id!==a.id) : [...prev,a.id]) : undefined}
+        sx={{ mb:1.5, borderRadius:T.radius.card, bgcolor:T.c.card,
+          border: isSelected ? `1.5px solid ${T.c.primary}` : `1px solid ${T.c.border}`,
+          boxShadow: isSelected ? `0 0 0 3px rgba(0,102,255,0.08)` : T.shadow.card,
+          cursor: selectMode?"pointer":"default",
+          transition:"all 0.15s ease",
+          "&:hover":{ boxShadow:T.shadow.hover } }}>
+        <CardContent sx={{ p:0, "&:last-child":{ pb:0 } }}>
+
+          {/* Main row */}
+          <Box sx={{ px:2, py:1.8, display:"flex", alignItems:"center", gap:1.5 }}>
+
+            {/* Checkbox */}
+            {selectMode && (
+              <Checkbox size="small" checked={isSelected}
+                onChange={e => { e.stopPropagation(); setSelectedAssets(prev =>
+                  e.target.checked ? [...prev,a.id] : prev.filter(id=>id!==a.id)); }}
+                sx={{ p:0, flexShrink:0, color:T.c.primary, "&.Mui-checked":{ color:T.c.primary } }} />
+            )}
+
+            {/* Avatar */}
+            <Box sx={{ width:40, height:40, borderRadius:"10px", flexShrink:0, bgcolor:"#F0F4FF",
+              display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <Typography sx={{ fontSize:15 }}>{typeEmoji[a.type]||"📈"}</Typography>
+            </Box>
+
+            {/* Name + tags */}
+            <Box sx={{ flex:1, minWidth:0 }}>
+              <Typography sx={{ fontWeight:700, fontSize:14, color:T.c.text1, lineHeight:1.3,
+                whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                {a.name}
+              </Typography>
+              <Box sx={{ display:"flex", gap:0.5, mt:0.4, alignItems:"center", flexWrap:"wrap" }}>
+                {a.symbol && (
+                  <Typography sx={{ fontSize:10, fontWeight:600, color:T.c.primary,
+                    bgcolor:"#EEF4FF", px:0.7, py:0.1, borderRadius:"4px" }}>{a.symbol}</Typography>
+                )}
+                {a.sector && a.sector!=="Unknown" && (
+                  <Typography sx={{ fontSize:10, color:T.c.text2,
+                    bgcolor:T.c.tag, px:0.7, py:0.1, borderRadius:"4px" }}>{a.sector}</Typography>
                 )}
               </Box>
-              <Typography variant="body2" color="text.secondary">Invested: {formatINR(invested)}</Typography>
-              <Box sx={{ display:"flex", alignItems:"center", gap:0.5, mt:0.5 }}>
-                {profit >= 0
-                  ? <TrendingUpIcon fontSize="small" sx={{ color:"#10b981" }} />
-                  : <TrendingDownIcon fontSize="small" sx={{ color:"#ef4444" }} />}
-                <Typography variant="body2" fontWeight={600} sx={{ color:profit>=0?"#10b981":"#ef4444" }}>
-                  {profit>=0?"+":""}{formatINR(profit)} ({pct}%)
-                </Typography>
-              </Box>
-              {a.last_updated && (
-                <Typography variant="caption" color="text.secondary" sx={{ mt:0.5, display:"block" }}>
-                  🕐 {new Date(a.last_updated).toLocaleString("en-IN",{dateStyle:"short",timeStyle:"short"})}
-                </Typography>
-              )}
-              <LinearProgress variant="determinate" value={Math.min(Number(ppct),100)}
-                sx={{ mt:1.5, borderRadius:2, height:5, bgcolor:"#f3f4f6",
-                  "& .MuiLinearProgress-bar":{ bgcolor:"#6366f1" } }} />
-              {a.target_pct > 0 && <>
-                <LinearProgress variant="determinate" value={Math.min(Number(a.target_pct),100)}
-                  sx={{ mt:0.5, borderRadius:2, height:3, bgcolor:"#f3f4f6",
-                    "& .MuiLinearProgress-bar":{ bgcolor:"#f59e0b", opacity:0.6 } }} />
-                <Typography variant="caption" color="text.secondary">Target: {a.target_pct}% · Current: {ppct}%</Typography>
-              </>}
             </Box>
-            <Box sx={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:1 }}>
-              <Typography variant="h6" fontWeight={800}>{formatINR(cv)}</Typography>
-              <Box sx={{ display:"flex", flexWrap:"wrap", justifyContent:"flex-end" }}>
-                <Tooltip title="Set Sector">
-                  <IconButton size="small" onClick={() => { setSectorEditAsset(a); setSectorEditVal(a.sector||"Unknown"); setSectorOpen(true); }} sx={{ color:"#10b981" }}>
-                    <AccountBalanceIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="Set Target %">
-                  <IconButton size="small" onClick={() => { setTargetAsset(a); setTargetPct(a.target_pct||""); setTargetOpen(true); }} sx={{ color:"#f59e0b" }}>
-                    <TrackChangesIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-                <IconButton size="small" onClick={() => handleOpen("edit",a,"asset")} sx={{ color:"#6366f1" }}>
-                  <EditIcon fontSize="small" />
-                </IconButton>
-                <IconButton size="small" onClick={() => handleDelete("assets",a.id)} sx={{ color:"#ef4444" }}>
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Box>
+
+            {/* Value + P&L */}
+            <Box sx={{ textAlign:"right", flexShrink:0 }}>
+              <Typography sx={{ fontWeight:700, fontSize:15, color:T.c.text1 }}>{formatINR(cv)}</Typography>
+              <Typography sx={{ fontSize:12, fontWeight:600, color:plColor, mt:0.2 }}>
+                {isProfit?"+":""}{pct}%
+              </Typography>
             </Box>
           </Box>
+
+          {/* Divider + stats */}
+          <Box sx={{ borderTop:`1px solid ${T.c.border}`, mx:2, py:1.2,
+            display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <Box sx={{ display:"flex", gap:3 }}>
+              <Box>
+                <Typography sx={{ fontSize:10, color:T.c.text3, mb:0.2 }}>Invested</Typography>
+                <Typography sx={{ fontSize:12, fontWeight:600, color:T.c.text2 }}>{formatINR(invested)}</Typography>
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize:10, color:T.c.text3, mb:0.2 }}>P&L</Typography>
+                <Typography sx={{ fontSize:12, fontWeight:600, color:plColor }}>
+                  {isProfit?"+":""}{formatINR(profit)}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize:10, color:T.c.text3, mb:0.2 }}>Qty</Typography>
+                <Typography sx={{ fontSize:12, fontWeight:600, color:T.c.text2 }}>{a.quantity}</Typography>
+              </Box>
+            </Box>
+
+            {/* Action icons — compact */}
+            {!selectMode && (
+              <Box sx={{ display:"flex", gap:0.3 }}>
+                {[
+                  { tip:"Sector",  icon:<AccountBalanceIcon sx={{fontSize:13}}/>, fn:()=>{ setSectorEditAsset(a); setSectorEditVal(a.sector||"Unknown"); setSectorOpen(true); } },
+                  { tip:"Target",  icon:<TrackChangesIcon sx={{fontSize:13}}/>,   fn:()=>{ setTargetAsset(a); setTargetPct(a.target_pct||""); setTargetOpen(true); } },
+                  { tip:"Edit",    icon:<EditIcon sx={{fontSize:13}}/>,           fn:()=>handleOpen("edit",a,"asset") },
+                  { tip:"Delete",  icon:<DeleteIcon sx={{fontSize:13}}/>,         fn:()=>handleDelete("assets",a.id), danger:true },
+                ].map((btn,i) => (
+                  <Tooltip key={i} title={btn.tip}>
+                    <IconButton size="small" onClick={btn.fn}
+                      sx={{ width:26, height:26, borderRadius:"6px",
+                        color: btn.danger ? T.c.loss : T.c.text3,
+                        "&:hover":{ bgcolor:btn.danger?"#FEF0EF":"#F0F4FF",
+                          color:btn.danger?T.c.loss:T.c.primary } }}>
+                      {btn.icon}
+                    </IconButton>
+                  </Tooltip>
+                ))}
+              </Box>
+            )}
+          </Box>
+
+          {/* Target progress — only if set */}
+          {drift !== null && (
+            <Box sx={{ px:2, pb:1.5 }}>
+              <LinearProgress variant="determinate" value={Math.min(Number(ppct),100)}
+                sx={{ borderRadius:4, height:3, bgcolor:T.c.border,
+                  "& .MuiLinearProgress-bar":{ borderRadius:4, bgcolor:T.c.primary } }} />
+              <Typography sx={{ fontSize:10, color:Math.abs(drift)>5?T.c.loss:T.c.text3, mt:0.4, fontWeight:500 }}>
+                Target {a.target_pct}% · current {ppct}%
+                {Math.abs(drift)>5 ? ` · ${drift>0?"▲":"▼"} ${Math.abs(drift)}% off` : " · ✓ on target"}
+              </Typography>
+            </Box>
+          )}
+
         </CardContent>
       </Card>
     );
@@ -774,7 +922,7 @@ export default function App() {
     const totalInt = emi*n - P;
     const lpct = networth.totalLiabilities > 0 ? ((l.amount/networth.totalLiabilities)*100).toFixed(1) : 0;
     return (
-      <Card sx={{ mb:2, borderRadius:3, border:"1px solid #fecaca" }}>
+      <Card sx={{ mb:1.5, borderRadius:T.radius.card, border:`1px solid ${T.c.border}`, bgcolor:T.c.card, boxShadow:T.shadow.card, "&:hover":{ boxShadow:T.shadow.hover } }}>
         <CardContent>
           <Box sx={{ display:"flex", justifyContent:"space-between" }}>
             <Box sx={{ flex:1 }}>
@@ -818,19 +966,19 @@ export default function App() {
     });
     return (
       <>
-        <Grid container spacing={2} sx={{ mb:3 }}>
+        <Grid container spacing={1.5} sx={{ mb:2 }}>
           <Grid item xs={6}>
             <StatCard icon={<TrendingUpIcon />} label="TOTAL P&L" value={`${gainPct}%`}
-              sub={formatINR(totalGain)} color={totalGain>=0?"#10b981":"#ef4444"} bg={totalGain>=0?"#ecfdf5":"#fef2f2"} />
+              sub={formatINR(totalGain)} color={totalGain>=0?T.c.gain:T.c.loss} bg={totalGain>=0?"#E6F7F3":"#FEF0EF"} />
           </Grid>
           <Grid item xs={6}>
             <StatCard icon={<SavingsIcon />} label="DIVIDENDS" value={formatINR(totalDividends)}
-              sub={`${formatINR(totalDivThisYear)} this year`} color="#8b5cf6" bg="#f5f3ff" />
+              sub={`${formatINR(totalDivThisYear)} this year`} color="#7C3AED" bg="#F3EEFF" />
           </Grid>
         </Grid>
 
         {driftAlerts.length > 0 && (
-          <Card sx={{ mb:3, borderRadius:3, border:"1px solid #fde68a", bgcolor:"#fffbeb" }}>
+          <Card sx={{ mb:2, borderRadius:T.radius.card, border:"1px solid #FDE68A", bgcolor:"#FFFBEB", boxShadow:T.shadow.card }}>
             <CardContent>
               <Typography variant="subtitle1" fontWeight={700} sx={{ mb:1.5, color:"#92400e" }}>⚠️ Allocation Drift Alerts</Typography>
               {driftAlerts.map((a,i) => {
@@ -852,10 +1000,10 @@ export default function App() {
         )}
 
         {/* Net Worth History */}
-        <Card sx={{ mb:3, borderRadius:3 }}>
+        <Card sx={{ mb:2, borderRadius:T.radius.card, boxShadow:T.shadow.card, border:`1px solid ${T.c.border}`, bgcolor:T.c.card }}>
           <CardContent>
             <Box sx={{ display:"flex", justifyContent:"space-between", alignItems:"center", mb:2 }}>
-              <Typography variant="subtitle1" fontWeight={700}>📈 Net Worth History</Typography>
+              <Typography sx={{ fontSize:14, fontWeight:700, color:T.c.text1 }}>Net Worth History</Typography>
               <Box sx={{ display:"flex", gap:1, alignItems:"center" }}>
                 {[7,30,90,180].map(d => (
                   <Chip key={d} label={`${d}d`} size="small" onClick={() => setHistoryDays(d)}
@@ -866,8 +1014,8 @@ export default function App() {
                 <Tooltip title="Save snapshot">
                   <IconButton size="small" sx={{ bgcolor:"#f5f3ff", color:"#6366f1" }}
                     onClick={async () => {
-                      await fetch(`${API}/analytics/snapshot`, { method:"POST" });
-                      fetchAnalytics(); showSnack("📸 Snapshot saved!");
+                      await apiFetch(`${API}/analytics/snapshot`, { method:"POST" });
+                      fetchAnalytics(); fetchAll(); showSnack("📸 Snapshot saved!");
                     }}>
                     <RefreshIcon fontSize="small" />
                   </IconButton>
@@ -884,7 +1032,8 @@ export default function App() {
                   date: new Date(h.recorded_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
                   "Net Worth":   +Number(h.net_worth).toFixed(0),
                   "Assets":      +Number(h.total_assets).toFixed(0),
-                  "Liabilities": +Number(h.total_liabilities).toFixed(0),
+                  "Invested":    +Number(h.total_invested||0).toFixed(0),
+                  "Liabilities": +Number(h.total_liabilities||0).toFixed(0),
                 }))}>
                   <defs>
                     <linearGradient id="networthGrad" x1="0" y1="0" x2="0" y2="1">
@@ -893,6 +1042,9 @@ export default function App() {
                     <linearGradient id="assetsGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#10b981" stopOpacity={0.15}/><stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                     </linearGradient>
+                    <linearGradient id="investedGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.15}/><stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                    </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                   <XAxis dataKey="date" tick={{ fontSize:11 }} />
@@ -900,8 +1052,9 @@ export default function App() {
                   <ReTooltip formatter={v => formatINR(v)} contentStyle={{ borderRadius:10, fontSize:12 }} />
                   <Legend />
                   <Area type="monotone" dataKey="Assets" stroke="#10b981" fill="url(#assetsGrad)" strokeWidth={2} dot={false} />
+                  <Area type="monotone" dataKey="Invested" stroke="#f59e0b" fill="url(#investedGrad)" strokeWidth={2} dot={false} strokeDasharray="5 3" />
+                  <Area type="monotone" dataKey="Liabilities" stroke="#ef4444" fill="none" strokeWidth={2} dot={false} strokeDasharray="4 2" />
                   <Area type="monotone" dataKey="Net Worth" stroke="#6366f1" fill="url(#networthGrad)" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="Liabilities" stroke="#ef4444" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
                 </AreaChart>
               </ResponsiveContainer>
             )}
@@ -916,9 +1069,9 @@ export default function App() {
               <Button size="small" variant="outlined"
                 sx={{ borderColor:"#6366f1", color:"#6366f1", fontWeight:600, borderRadius:2 }}
                 onClick={async () => {
-                  const res = await fetch(`${API}/analytics/auto-sector`, { method:"POST" });
+                  const res = await apiFetch(`${API}/analytics/auto-sector`, { method:"POST" });
                   const data = await res.json();
-                  showSnack(data.message || "Sectors assigned!"); fetchAll(); fetchAnalytics();
+                  showSnack(data.message || "Sectors assigned!"); fetchAll();
                 }}>⚡ Auto-Assign</Button>
             </Box>
             {sectors.length === 0 ? (
@@ -992,10 +1145,10 @@ export default function App() {
         </Card>
 
         {/* Dividend Tracker */}
-        <Card sx={{ mb:3, borderRadius:3 }}>
+        <Card sx={{ mb:2, borderRadius:T.radius.card, boxShadow:T.shadow.card, border:`1px solid ${T.c.border}`, bgcolor:T.c.card }}>
           <CardContent>
             <Box sx={{ display:"flex", justifyContent:"space-between", alignItems:"center", mb:2 }}>
-              <Typography variant="subtitle1" fontWeight={700}>💰 Dividend Tracker</Typography>
+              <Typography sx={{ fontSize:14, fontWeight:700, color:T.c.text1 }}>Dividend Tracker</Typography>
               <Button size="small" variant="outlined" onClick={() => setDivOpen(true)}
                 sx={{ borderColor:"#6366f1", color:"#6366f1", fontWeight:600, borderRadius:2 }}>+ Add</Button>
             </Box>
@@ -1038,7 +1191,7 @@ export default function App() {
                         <TableCell>
                           <IconButton size="small" sx={{ color:"#ef4444" }}
                             onClick={async () => {
-                              await fetch(`${API}/analytics/dividends/${d.id}`, { method:"DELETE" });
+                              await apiFetch(`${API}/dividends/${d.id}`, { method:"DELETE" });
                               fetchAnalytics(); showSnack("Dividend deleted");
                             }}>
                             <DeleteIcon sx={{ fontSize:14 }} />
@@ -1238,16 +1391,224 @@ export default function App() {
     );
   };
 
+
+  // ── Cash handlers (App level to prevent re-render flicker) ──────────────
+  const openCashAdd = (cat) => {
+    setCashEditMode(false); setCashEditId(null);
+    setCashName(""); setCashAmount(""); setCashTarget(""); setCashNotes(""); setCashCategory(cat);
+    setCashOpen(true);
+  };
+  const openCashEdit = (c) => {
+    setCashEditMode(true); setCashEditId(c.id);
+    setCashName(c.name); setCashAmount(String(c.amount)); setCashTarget(String(c.target_amount||""));
+    setCashNotes(c.notes||""); setCashCategory(c.category);
+    setCashOpen(true);
+  };
+  const handleSaveCash = async () => {
+    if (!cashName || !cashAmount) return showSnack("Name and amount required","error");
+    try {
+      const url    = cashEditMode ? `${API}/cash/${cashEditId}` : `${API}/cash`;
+      const method = cashEditMode ? "PUT" : "POST";
+      await apiFetch(url, { method,
+        body:JSON.stringify({ name:cashName, category:cashCategory, amount:Number(cashAmount), target_amount:Number(cashTarget)||0, notes:cashNotes }) });
+      showSnack(cashEditMode ? "Updated!" : "Added!"); setCashOpen(false); fetchCash();
+    } catch { showSnack("Failed","error"); }
+  };
+  const handleDeleteCash = async (id) => {
+    await apiFetch(`${API}/cash/${id}`, { method:"DELETE" });
+    showSnack("Deleted"); fetchCash();
+  };
+
+  // ── Cash & Emergency Fund Tab ──────────────────────────────────────────
+  const CashTab = () => {
+    const totalLiquid    = cashSummary.liquid.total;
+    const targetLiquid   = cashSummary.liquid.target;
+    const totalEmergency = cashSummary.emergency.total;
+    const targetEmergency= cashSummary.emergency.target;
+    const liquidPct      = targetLiquid   > 0 ? Math.min((totalLiquid/targetLiquid)*100,100)   : 0;
+    const emergencyPct   = targetEmergency> 0 ? Math.min((totalEmergency/targetEmergency)*100,100) : 0;
+    const liquid    = cashHoldings.filter(c => c.category === "liquid");
+    const emergency = cashHoldings.filter(c => c.category === "emergency");
+
+    const CashCard = ({ item }) => (
+      <Box sx={{ display:"flex", justifyContent:"space-between", alignItems:"center",
+        p:1.5, mb:1, borderRadius:2, bgcolor:"#f9fafb", border:"1px solid #e5e7eb" }}>
+        <Box>
+          <Typography variant="body2" fontWeight={700}>{item.name}</Typography>
+          {item.notes && <Typography variant="caption" color="text.secondary">{item.notes}</Typography>}
+        </Box>
+        <Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
+          <Typography variant="body2" fontWeight={800} sx={{ color:"#10b981" }}>{formatINR(item.amount)}</Typography>
+          <IconButton size="small" onClick={() => openCashEdit(item)} sx={{ color:"#6366f1" }}><EditIcon fontSize="small" /></IconButton>
+          <IconButton size="small" onClick={() => handleDeleteCash(item.id)} sx={{ color:"#ef4444" }}><DeleteIcon fontSize="small" /></IconButton>
+        </Box>
+      </Box>
+    );
+
+    return (
+      <>
+        {/* Header */}
+        <Card sx={{ mb:3, borderRadius:4, background:"linear-gradient(135deg,#10b981,#059669)",
+          boxShadow:"0 8px 32px rgba(16,185,129,0.3)" }}>
+          <CardContent sx={{ p:3 }}>
+            <Typography sx={{ color:"rgba(255,255,255,0.8)", fontWeight:600, fontSize:12, letterSpacing:1 }}>
+              TOTAL CASH RESERVES
+            </Typography>
+            <Typography variant="h3" fontWeight={800} sx={{ color:"white", mt:0.5 }}>
+              {formatINR(totalLiquid + totalEmergency)}
+            </Typography>
+            <Box sx={{ display:"flex", gap:1, mt:1.5, flexWrap:"wrap" }}>
+              <Chip label={`💵 Liquid: ${formatINR(totalLiquid)}`} size="small"
+                sx={{ bgcolor:"rgba(255,255,255,0.2)", color:"white", fontWeight:600 }} />
+              <Chip label={`🛡️ Emergency: ${formatINR(totalEmergency)}`} size="small"
+                sx={{ bgcolor:"rgba(255,255,255,0.2)", color:"white", fontWeight:600 }} />
+            </Box>
+          </CardContent>
+        </Card>
+
+        {/* Liquid Cash */}
+        <Card sx={{ mb:3, borderRadius:3, border:"1px solid #d1fae5" }}>
+          <CardContent>
+            <Box sx={{ display:"flex", justifyContent:"space-between", alignItems:"center", mb:1.5 }}>
+              <Box>
+                <Typography variant="subtitle1" fontWeight={800} sx={{ color:"#065f46" }}>
+                  💵 Liquid Cash
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  For market crashes & opportunities
+                </Typography>
+              </Box>
+              <Button size="small" variant="outlined" onClick={() => openCashAdd("liquid")}
+                sx={{ borderColor:"#10b981", color:"#10b981", fontWeight:600, borderRadius:2 }}>+ Add</Button>
+            </Box>
+
+            {/* Progress */}
+            {targetLiquid > 0 && (
+              <Box sx={{ mb:2 }}>
+                <Box sx={{ display:"flex", justifyContent:"space-between", mb:0.5 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    {formatINR(totalLiquid)} of {formatINR(targetLiquid)} target
+                  </Typography>
+                  <Typography variant="caption" fontWeight={700}
+                    sx={{ color: liquidPct >= 100 ? "#10b981" : liquidPct >= 50 ? "#f59e0b" : "#ef4444" }}>
+                    {liquidPct.toFixed(0)}%
+                  </Typography>
+                </Box>
+                <LinearProgress variant="determinate" value={liquidPct}
+                  sx={{ borderRadius:3, height:8, bgcolor:"#d1fae5",
+                    "& .MuiLinearProgress-bar":{ bgcolor: liquidPct>=100?"#10b981":liquidPct>=50?"#f59e0b":"#ef4444" } }} />
+                {liquidPct < 100 && (
+                  <Typography variant="caption" sx={{ color:"#ef4444", mt:0.5, display:"block" }}>
+                    ⚠️ {formatINR(targetLiquid - totalLiquid)} more needed to reach target
+                  </Typography>
+                )}
+                {liquidPct >= 100 && (
+                  <Typography variant="caption" sx={{ color:"#10b981", mt:0.5, display:"block" }}>
+                    ✅ Liquid cash target achieved!
+                  </Typography>
+                )}
+              </Box>
+            )}
+
+            {liquid.length === 0 ? (
+              <Box sx={{ textAlign:"center", py:3 }}>
+                <Typography fontSize={32}>💵</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt:1 }}>No liquid cash added yet.</Typography>
+                <Typography variant="caption" color="text.secondary">Add savings accounts, FD proceeds, cash at hand</Typography>
+              </Box>
+            ) : liquid.map(c => <CashCard key={c.id} item={c} />)}
+
+            <Box sx={{ mt:1.5, p:1.5, bgcolor:"#ecfdf5", borderRadius:2 }}>
+              <Typography variant="caption" sx={{ color:"#065f46", fontWeight:600 }}>💡 Rule of Thumb</Typography>
+              <Typography variant="caption" sx={{ color:"#065f46", display:"block" }}>
+                Keep 10–20% of your portfolio value as liquid cash to buy during market dips.
+              </Typography>
+            </Box>
+          </CardContent>
+        </Card>
+
+        {/* Emergency Fund */}
+        <Card sx={{ mb:3, borderRadius:3, border:"1px solid #dbeafe" }}>
+          <CardContent>
+            <Box sx={{ display:"flex", justifyContent:"space-between", alignItems:"center", mb:1.5 }}>
+              <Box>
+                <Typography variant="subtitle1" fontWeight={800} sx={{ color:"#1e40af" }}>
+                  🛡️ Emergency Fund
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  For job loss, medical & unexpected expenses
+                </Typography>
+              </Box>
+              <Button size="small" variant="outlined" onClick={() => openCashAdd("emergency")}
+                sx={{ borderColor:"#3b82f6", color:"#3b82f6", fontWeight:600, borderRadius:2 }}>+ Add</Button>
+            </Box>
+
+            {/* Progress */}
+            {targetEmergency > 0 && (
+              <Box sx={{ mb:2 }}>
+                <Box sx={{ display:"flex", justifyContent:"space-between", mb:0.5 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    {formatINR(totalEmergency)} of {formatINR(targetEmergency)} target
+                  </Typography>
+                  <Typography variant="caption" fontWeight={700}
+                    sx={{ color: emergencyPct>=100?"#10b981":emergencyPct>=50?"#f59e0b":"#ef4444" }}>
+                    {emergencyPct.toFixed(0)}%
+                  </Typography>
+                </Box>
+                <LinearProgress variant="determinate" value={emergencyPct}
+                  sx={{ borderRadius:3, height:8, bgcolor:"#dbeafe",
+                    "& .MuiLinearProgress-bar":{ bgcolor: emergencyPct>=100?"#10b981":emergencyPct>=50?"#f59e0b":"#3b82f6" } }} />
+                {emergencyPct < 100 && (
+                  <Typography variant="caption" sx={{ color:"#ef4444", mt:0.5, display:"block" }}>
+                    ⚠️ {formatINR(targetEmergency - totalEmergency)} more needed to reach target
+                  </Typography>
+                )}
+                {emergencyPct >= 100 && (
+                  <Typography variant="caption" sx={{ color:"#10b981", mt:0.5, display:"block" }}>
+                    ✅ Emergency fund fully funded!
+                  </Typography>
+                )}
+              </Box>
+            )}
+
+            {emergency.length === 0 ? (
+              <Box sx={{ textAlign:"center", py:3 }}>
+                <Typography fontSize={32}>🛡️</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt:1 }}>No emergency fund added yet.</Typography>
+                <Typography variant="caption" color="text.secondary">Add savings set aside for emergencies</Typography>
+              </Box>
+            ) : emergency.map(c => <CashCard key={c.id} item={c} />)}
+
+            <Box sx={{ mt:1.5, p:1.5, bgcolor:"#eff6ff", borderRadius:2 }}>
+              <Typography variant="caption" sx={{ color:"#1e40af", fontWeight:600 }}>💡 Rule of Thumb</Typography>
+              <Typography variant="caption" sx={{ color:"#1e40af", display:"block" }}>
+                Aim for 6 months of monthly expenses. Keep in a liquid savings account or sweep FD.
+              </Typography>
+            </Box>
+          </CardContent>
+        </Card>
+
+      </>
+    );
+  };
+
   // ── Main render ────────────────────────────────────────────────────────
   return (
-    <Box sx={{ background:"#f9fafb", minHeight:"100vh" }}>
+    <Box sx={{ background:"#F7F8FA", minHeight:"100vh" }}>
 
       {/* Top Bar */}
-      <Paper elevation={0} sx={{ position:"sticky", top:0, zIndex:100, borderBottom:"1px solid #e5e7eb", bgcolor:"white" }}>
+      <Paper elevation={0} sx={{ position:"sticky", top:0, zIndex:100, borderBottom:"1px solid #F0F0F0", bgcolor:"#FFFFFF" }}>
         <Box sx={{ display:"flex", alignItems:"center", justifyContent:"space-between", px:2, py:1.5 }}>
           <Box sx={{ display:"flex", alignItems:"center", gap:1 }}>
-            <Avatar sx={{ bgcolor:"#6366f1", width:34, height:34 }}><AccountBalanceWalletIcon fontSize="small" /></Avatar>
-            <Typography variant="h6" fontWeight={800} sx={{ color:"#6366f1" }}>WealthTrack</Typography>
+            <Box sx={{ display:"flex", alignItems:"center", justifyContent:"center",
+              width:34, height:34, borderRadius:2,
+              bgcolor:T.c.primary, boxShadow:"0 2px 8px rgba(0,102,255,0.3)", flexShrink:0 }}>
+              <Typography sx={{ color:"white", fontWeight:900, fontSize:16, letterSpacing:-1 }}>F</Typography>
+            </Box>
+            <Typography variant="h6" fontWeight={900} sx={{ letterSpacing:-0.5 }}>
+              <Box component="span" sx={{ color:"#1f2937" }}>Folio</Box>
+              <Box component="span" sx={{ color:T.c.primary }}>X</Box>
+            </Typography>
           </Box>
           <Box sx={{ display:"flex", gap:0.5, alignItems:"center" }}>
             <input type="file" accept=".xlsx,.csv" ref={fileInputRef} style={{ display:"none" }} onChange={handleZerodhaImport} />
@@ -1262,10 +1623,12 @@ export default function App() {
               </IconButton>
             </Tooltip>
             <Tooltip title="Profile">
-              <IconButton size="small" onClick={() => setProfileOpen(true)}>
+              <IconButton size="small" onClick={() => setProfileOpen(true)}
+                sx={{ p:0.3, overflow:"hidden", width:34, height:34, borderRadius:"50%",
+                  border:"2px solid #6366f1", boxSizing:"border-box" }}>
                 {currentUser?.avatar
                   ? <Box component="img" src={currentUser.avatar} alt="avatar"
-                      sx={{ width:28, height:28, borderRadius:"50%", border:"2px solid #6366f1" }} />
+                      sx={{ width:"100%", height:"100%", borderRadius:"50%", objectFit:"cover", display:"block" }} />
                   : <Avatar sx={{ width:28, height:28, bgcolor:"#6366f1", fontSize:13, fontWeight:700 }}>
                       {(currentUser?.name||profile.name)?.charAt(0)?.toUpperCase()||"U"}
                     </Avatar>
@@ -1276,12 +1639,14 @@ export default function App() {
         </Box>
         {loading && <LinearProgress sx={{ height:2 }} />}
         <Box sx={{ display:"flex", borderTop:"1px solid #f3f4f6", overflowX:"auto" }}>
-          {["dashboard","assets","liabilities","analytics"].map(tab => (
+          {["dashboard","assets","liabilities","analytics","cash"].map(tab => (
             <Button key={tab} onClick={() => setActiveTab(tab)}
-              sx={{ flex:1, py:1, borderRadius:0, textTransform:"capitalize", fontWeight:600, fontSize:12,
-                color:activeTab===tab?"#6366f1":"#9ca3af",
-                borderBottom:activeTab===tab?"2px solid #6366f1":"2px solid transparent" }}>
-              {tab}
+              sx={{ flex:1, py:1.2, borderRadius:0, textTransform:"capitalize", fontWeight:600, fontSize:12,
+                color:activeTab===tab?"#0066FF":"#9CA3AF",
+                borderBottom:activeTab===tab?"2px solid #0066FF":"2px solid transparent",
+                background:"transparent", transition:"color 0.15s ease",
+                "&:hover":{ color:"#0066FF", background:"transparent" } }}>
+              {tab === "cash" ? "Cash" : tab}
             </Button>
           ))}
         </Box>
@@ -1292,26 +1657,42 @@ export default function App() {
         <MenuItem onClick={exportPDF}>📄 Export PDF</MenuItem>
       </Menu>
 
-      <Container maxWidth="sm" sx={{ py:3 }}>
+      <Container maxWidth="sm" sx={{ py:2 }}>
 
         {/* DASHBOARD */}
         {activeTab === "dashboard" && <>
-          <Card sx={{ mb:3, borderRadius:4, background:"linear-gradient(135deg,#6366f1,#8b5cf6)",
-            boxShadow:"0 8px 32px rgba(99,102,241,0.3)" }}>
-            <CardContent sx={{ p:3 }}>
-              <Typography sx={{ color:"rgba(255,255,255,0.8)", fontWeight:600, fontSize:12, letterSpacing:1 }}>NET WORTH · ₹ INR</Typography>
-              <Typography variant="h3" fontWeight={800} sx={{ color:"white", mt:0.5 }}>{formatINR(networth.netWorth)}</Typography>
-              <Box sx={{ display:"flex", gap:1, mt:1.5, flexWrap:"wrap" }}>
-                <Chip label={`${totalGain>=0?"▲":"▼"} ${formatINR(Math.abs(totalGain))} P&L`} size="small" sx={{ bgcolor:"rgba(255,255,255,0.2)", color:"white", fontWeight:600 }} />
-                <Chip label={`${gainPct}% returns`} size="small" sx={{ bgcolor:"rgba(255,255,255,0.2)", color:"white", fontWeight:600 }} />
+          {/* IndMoney-style hero — white card, blue accent */}
+          <Card sx={{ mb:2, borderRadius:T.radius.card, bgcolor:"#0066FF",
+            boxShadow:"0 4px 20px rgba(0,102,255,0.25)", overflow:"hidden", position:"relative" }}>
+            <CardContent sx={{ p:2.5, pb:"20px !important" }}>
+              <Typography sx={{ fontSize:11, color:"rgba(255,255,255,0.7)", fontWeight:600,
+                letterSpacing:"0.5px", mb:0.5 }}>Total Portfolio Value</Typography>
+              <Typography sx={{ fontSize:32, fontWeight:700, color:"#fff", lineHeight:1.1, mb:2 }}>
+                {formatINR(networth.netWorth)}
+              </Typography>
+              <Box sx={{ display:"flex", gap:3 }}>
+                <Box>
+                  <Typography sx={{ fontSize:10, color:"rgba(255,255,255,0.6)", mb:0.3 }}>Invested</Typography>
+                  <Typography sx={{ fontSize:14, fontWeight:700, color:"#fff" }}>{formatINR(totalInvested)}</Typography>
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize:10, color:"rgba(255,255,255,0.6)", mb:0.3 }}>P&L</Typography>
+                  <Typography sx={{ fontSize:14, fontWeight:700, color:totalGain>=0?"#7FFFD4":"#FFB3B3" }}>
+                    {totalGain>=0?"+":""}{formatINR(totalGain)} ({gainPct}%)
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize:10, color:"rgba(255,255,255,0.6)", mb:0.3 }}>Holdings</Typography>
+                  <Typography sx={{ fontSize:14, fontWeight:700, color:"#fff" }}>{assets.length}</Typography>
+                </Box>
               </Box>
             </CardContent>
           </Card>
-          <Grid container spacing={2} sx={{ mb:3 }}>
-            <Grid item xs={6}><StatCard icon={<TrendingUpIcon />} label="TOTAL ASSETS" value={formatINR(networth.totalAssets)} sub={`${assets.length} holdings`} color="#10b981" bg="#ecfdf5" /></Grid>
-            <Grid item xs={6}><StatCard icon={<CreditCardIcon />} label="LIABILITIES" value={formatINR(networth.totalLiabilities)} sub={`${liabilities.length} loans`} color="#ef4444" bg="#fef2f2" /></Grid>
-            <Grid item xs={6}><StatCard icon={<BalanceIcon />} label="DEBT RATIO" value={`${debtRatio}%`} sub={debtRatio<40?"✅ Healthy":"⚠️ Risky"} color="#f59e0b" bg="#fffbeb" /></Grid>
-            <Grid item xs={6}><StatCard icon={<AccountBalanceIcon />} label="INVESTED" value={formatINR(totalInvested)} sub="cost basis" color="#6366f1" bg="#f5f3ff" /></Grid>
+          <Grid container spacing={1.5} sx={{ mb:2 }}>
+            <Grid item xs={6}><StatCard icon={<TrendingUpIcon />} label="Total Assets" value={formatINR(networth.totalAssets)} sub={`${assets.length} holdings`} color={T.c.gain} bg="#E6F7F3" /></Grid>
+            <Grid item xs={6}><StatCard icon={<CreditCardIcon />} label="Liabilities" value={formatINR(networth.totalLiabilities)} sub={`${liabilities.length} loans`} color={T.c.loss} bg="#FEF0EF" /></Grid>
+            <Grid item xs={6}><StatCard icon={<BalanceIcon />} label="Debt Ratio" value={`${debtRatio}%`} sub={debtRatio<40?"Healthy":"Risky"} color="#F59E0B" bg="#FEF9EE" /></Grid>
+            <Grid item xs={6}><StatCard icon={<AccountBalanceIcon />} label="Invested" value={formatINR(totalInvested)} sub="cost basis" color={T.c.primary} bg="#EEF4FF" /></Grid>
           </Grid>
           {assets.length > 0 && (
             <Card sx={{ mb:3, borderRadius:3 }}>
@@ -1333,9 +1714,9 @@ export default function App() {
               </CardContent>
             </Card>
           )}
-          <Card sx={{ mb:3, borderRadius:3 }}>
+          <Card sx={{ mb:2, borderRadius:T.radius.card, boxShadow:T.shadow.card, border:`1px solid ${T.c.border}`, bgcolor:T.c.card }}>
             <CardContent>
-              <Typography variant="subtitle1" fontWeight={700} sx={{ mb:1 }}>Overview</Typography>
+              <Typography sx={{ fontSize:14, fontWeight:700, color:T.c.text1, mb:1.5 }}>Overview</Typography>
               <ResponsiveContainer width="100%" height={180}>
                 <BarChart data={[
                   {name:"Assets",      value:+networth.totalAssets.toFixed(0)},
@@ -1357,9 +1738,46 @@ export default function App() {
 
         {/* ASSETS */}
         {activeTab === "assets" && <>
-          <Box sx={{ display:"flex", justifyContent:"space-between", alignItems:"center", mb:2 }}>
-            <Typography variant="h6" fontWeight={700}>Assets ({assets.length})</Typography>
-            <Chip label={formatINR(networth.totalAssets)} sx={{ bgcolor:"#ecfdf5", color:"#10b981", fontWeight:700 }} />
+          <Box sx={{ mb:2.5 }}>
+            <Box sx={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <Box>
+                <Typography sx={{ fontSize:18, fontWeight:700, color:T.c.text1 }}>Holdings</Typography>
+                <Typography sx={{ fontSize:12, color:T.c.text2, mt:0.2 }}>{assets.length} assets · {formatINR(networth.totalAssets)}</Typography>
+              </Box>
+              <Box sx={{ display:"flex", gap:1, alignItems:"center" }}>
+                <Button size="small" onClick={() => { setSelectMode(s => !s); setSelectedAssets([]); }}
+                  sx={{ fontSize:11, fontWeight:600, borderRadius:"8px", color:selectMode?T.c.loss:T.c.primary,
+                    bgcolor:selectMode?"#FEF0EF":"#EEF4FF",
+                    "&:hover":{ bgcolor:selectMode?"#FDDCDA":"#D6E8FF" }, px:1.5, minWidth:0 }}>
+                  {selectMode ? "✕ Cancel" : "☑ Select"}
+                </Button>
+
+              </Box>
+            </Box>
+
+            {/* Bulk action bar */}
+            <Collapse in={selectMode}>
+              <Box sx={{ mt:1.5, p:1.5, borderRadius:"10px", bgcolor:"#F7F8FA",
+                border:"1px solid #E8E8F0",
+                display:"flex", alignItems:"center", gap:1.5 }}>
+                <Checkbox
+                  size="small"
+                  checked={selectedAssets.length === assets.length && assets.length > 0}
+                  indeterminate={selectedAssets.length > 0 && selectedAssets.length < assets.length}
+                  onChange={e => setSelectedAssets(e.target.checked ? assets.map(a => a.id) : [])}
+                  sx={{ p:0.5, color:T.c.primary, "&.Mui-checked":{ color:T.c.primary }, "&.MuiCheckbox-indeterminate":{ color:T.c.primary } }} />
+                <Typography variant="body2" fontWeight={700} sx={{ color:"#374151", flex:1 }}>
+                  {selectedAssets.length > 0 ? `${selectedAssets.length} selected` : "Select all"}
+                </Typography>
+                {selectedAssets.length > 0 && (
+                  <Button size="small" variant="contained" onClick={handleBulkDelete}
+                    sx={{ bgcolor:T.c.loss, "&:hover":{ bgcolor:"#C53A2F" }, fontWeight:600,
+                      borderRadius:"8px", fontSize:11 }}>
+                    🗑 Delete {selectedAssets.length}
+                  </Button>
+                )}
+              </Box>
+            </Collapse>
           </Box>
           {assets.length === 0
             ? <Typography color="text.secondary" sx={{ textAlign:"center", py:5 }}>No assets yet. Tap + to add.</Typography>
@@ -1377,6 +1795,9 @@ export default function App() {
             : liabilities.map(l => <LiabilityCard key={l.id} l={l} />)}
         </>}
 
+        {/* CASH */}
+        {activeTab === "cash" && <CashTab />}
+
         {/* ANALYTICS */}
         {activeTab === "analytics" && <AnalyticsTab />}
 
@@ -1386,16 +1807,17 @@ export default function App() {
 
       {/* FAB */}
       <Fab onClick={() => handleOpen("add")}
-        sx={{ position:"fixed", bottom:28, right:24, bgcolor:"#6366f1", color:"white",
-          boxShadow:"0 4px 20px rgba(99,102,241,0.4)", "&:hover":{ bgcolor:"#4f46e5" } }}>
+        sx={{ position:"fixed", bottom:28, right:24, bgcolor:T.c.primary, color:"white",
+          boxShadow:T.shadow.fab, borderRadius:"14px",
+          "&:hover":{ bgcolor:"#0052CC" }, transition:"all 0.15s ease" }}>
         <AddIcon />
       </Fab>
 
       {/* AI Advisor FAB */}
       <Fab onClick={() => setAiOpen(true)}
-        sx={{ position:"fixed", bottom:28, right:88, bgcolor:"white", color:"#6366f1",
-          boxShadow:"0 4px 20px rgba(99,102,241,0.35)", border:"2px solid #6366f1",
-          "&:hover":{ bgcolor:"#f5f3ff" } }}>
+        sx={{ position:"fixed", bottom:28, right:92, bgcolor:"white", color:T.c.primary,
+          boxShadow:"0 4px 16px rgba(0,0,0,0.10)", border:`1px solid ${T.c.border}`,
+          borderRadius:"14px", "&:hover":{ bgcolor:"#EEF4FF" }, transition:"all 0.15s ease" }}>
         <SmartToyIcon />
       </Fab>
 
@@ -1404,22 +1826,33 @@ export default function App() {
         PaperProps={{ sx:{ width:{ xs:"100vw", sm:400 }, display:"flex", flexDirection:"column" } }}>
 
         {/* Header */}
-        <Box sx={{ p:2, background:"linear-gradient(135deg,#6366f1,#8b5cf6)",
+        <Box sx={{ p:2.5, background:T.grad.dark, position:"relative", overflow:"hidden",
           display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <Box sx={{ display:"flex", alignItems:"center", gap:1.5 }}>
-            <Avatar sx={{ bgcolor:"rgba(255,255,255,0.2)", width:36, height:36 }}>
-              <SmartToyIcon sx={{ color:"white", fontSize:20 }} />
-            </Avatar>
+          <Box sx={{ position:"absolute", top:-20, right:-20, width:100, height:100,
+            borderRadius:"50%", bgcolor:"rgba(139,92,246,0.3)", filter:"blur(30px)", pointerEvents:"none" }} />
+          <Box sx={{ display:"flex", alignItems:"center", gap:1.5, position:"relative", zIndex:1 }}>
+            <Box sx={{ width:40, height:40, borderRadius:"14px", bgcolor:"rgba(255,255,255,0.15)",
+              border:"1px solid rgba(255,255,255,0.2)", display:"flex", alignItems:"center", justifyContent:"center",
+              backdropFilter:"blur(10px)" }}>
+              <SmartToyIcon sx={{ color:"white", fontSize:22 }} />
+            </Box>
             <Box>
-              <Typography variant="subtitle1" fontWeight={800} sx={{ color:"white", lineHeight:1.2 }}>
+              <Typography variant="subtitle1" fontWeight={900} sx={{ color:"white", lineHeight:1.2, letterSpacing:"-0.3px" }}>
                 AI Portfolio Advisor
               </Typography>
-              <Typography variant="caption" sx={{ color:"rgba(255,255,255,0.8)" }}>
-                Powered by Gemini · Live portfolio data
-              </Typography>
+              <Box sx={{ display:"flex", alignItems:"center", gap:0.5 }}>
+                <Box sx={{ width:6, height:6, borderRadius:"50%", bgcolor:"#6ee7b7",
+                  boxShadow:"0 0 6px #6ee7b7", animation:"pulse 2s infinite",
+                  "@keyframes pulse":{ "0%,100%":{ opacity:1 }, "50%":{ opacity:0.4 } } }} />
+                <Typography variant="caption" sx={{ color:"rgba(255,255,255,0.6)", fontWeight:600, fontSize:10 }}>
+                  Groq LLaMA · Live data
+                </Typography>
+              </Box>
             </Box>
           </Box>
-          <IconButton onClick={() => setAiOpen(false)} sx={{ color:"white" }}>✕</IconButton>
+          <IconButton onClick={() => setAiOpen(false)}
+            sx={{ color:"rgba(255,255,255,0.7)", bgcolor:"rgba(255,255,255,0.1)", width:32, height:32,
+              borderRadius:"10px", "&:hover":{ bgcolor:"rgba(255,255,255,0.2)", color:"white" } }}>✕</IconButton>
         </Box>
 
         {/* Quick Insights horizontal scroll */}
@@ -1478,12 +1911,13 @@ export default function App() {
                       <SmartToyIcon sx={{ fontSize:16 }} />
                     </Avatar>
                   )}
-                  <Box sx={{ maxWidth:"80%", p:1.5, borderRadius:2,
-                    bgcolor:msg.role==="user"?"#6366f1":"#f9fafb",
-                    border:msg.role==="assistant"?"1px solid #e5e7eb":"none" }}>
+                  <Box sx={{ maxWidth:"80%", p:1.5, borderRadius:msg.role==="user"?"16px 16px 4px 16px":"16px 16px 16px 4px",
+                    background:msg.role==="user"?T.grad.primary:"white",
+                    boxShadow:msg.role==="user"?"0 4px 12px rgba(99,102,241,0.3)":"0 2px 8px rgba(0,0,0,0.06)",
+                    border:msg.role==="assistant"?"1px solid rgba(99,102,241,0.08)":"none" }}>
                     <Typography variant="body2"
-                      sx={{ color:msg.role==="user"?"white":"#111827",
-                        whiteSpace:"pre-wrap", lineHeight:1.6 }}>
+                      sx={{ color:msg.role==="user"?"white":"#1e1b4b",
+                        whiteSpace:"pre-wrap", lineHeight:1.7, fontSize:13 }}>
                       {msg.content}
                     </Typography>
                   </Box>
@@ -1524,7 +1958,7 @@ export default function App() {
         </Box>
 
         {/* Input */}
-        <Box sx={{ p:2, borderTop:"1px solid #e5e7eb", display:"flex", flexDirection:"column", gap:1 }}>
+        <Box sx={{ p:2, borderTop:"1px solid rgba(99,102,241,0.08)", display:"flex", flexDirection:"column", gap:1, bgcolor:"#fafafa" }}>
           {chatMessages.length > 0 && (
             <Button size="small" onClick={() => setChatMessages([])}
               sx={{ color:"#9ca3af", fontSize:11, alignSelf:"flex-start", p:0 }}>
@@ -1538,9 +1972,11 @@ export default function App() {
               onKeyDown={e => { if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); sendChatMessage(); }}}
               sx={{ "& .MuiOutlinedInput-root":{ borderRadius:3 } }} />
             <IconButton onClick={sendChatMessage} disabled={!chatInput.trim()||chatLoading}
-              sx={{ bgcolor:"#6366f1", color:"white", borderRadius:2,
-                "&:hover":{ bgcolor:"#4f46e5" },
-                "&:disabled":{ bgcolor:"#e5e7eb", color:"#9ca3af" } }}>
+              sx={{ background:T.grad.primary, color:"white", borderRadius:"12px", width:42, height:42,
+                boxShadow:"0 4px 12px rgba(99,102,241,0.35)",
+                "&:hover":{ background:"linear-gradient(135deg,#4f46e5,#7c3aed)", transform:"scale(1.05)" },
+                "&:disabled":{ bgcolor:"#e5e7eb", color:"#9ca3af", boxShadow:"none", transform:"none" },
+                transition:"all 0.2s ease" }}>
               <SendIcon fontSize="small" />
             </IconButton>
           </Box>
@@ -1558,11 +1994,11 @@ export default function App() {
             <Box sx={{ display:"flex", gap:1 }}>
               {notifications.length > 0 && <>
                 <Button size="small" sx={{ fontSize:11, color:"#6366f1" }}
-                  onClick={async () => { await fetch(`${API}/notifications/read-all`,{method:"PUT"}); fetchNotifications(); }}>
+                  onClick={async () => { await apiFetch(`${API}/notifications/read-all`,{method:"PUT"}); fetchNotifications(); }}>
                   Mark all read
                 </Button>
                 <Button size="small" sx={{ fontSize:11, color:"#ef4444" }}
-                  onClick={async () => { await fetch(`${API}/notifications/clear-all`,{method:"DELETE"}); fetchNotifications(); }}>
+                  onClick={async () => { await apiFetch(`${API}/notifications/clear-all`,{method:"DELETE"}); fetchNotifications(); }}>
                   Clear all
                 </Button>
               </>}
@@ -1590,14 +2026,14 @@ export default function App() {
                         {!n.is_read && (
                           <Tooltip title="Mark as read">
                             <IconButton size="small" sx={{ p:0.3 }}
-                              onClick={async () => { await fetch(`${API}/notifications/${n.id}/read`,{method:"PUT"}); fetchNotifications(); }}>
+                              onClick={async () => { await apiFetch(`${API}/notifications/${n.id}/read`,{method:"PUT"}); fetchNotifications(); }}>
                               <CheckCircleIcon sx={{ fontSize:16, color:"#10b981" }} />
                             </IconButton>
                           </Tooltip>
                         )}
                         <Tooltip title="Delete">
                           <IconButton size="small" sx={{ p:0.3 }}
-                            onClick={async () => { await fetch(`${API}/notifications/${n.id}`,{method:"DELETE"}); fetchNotifications(); }}>
+                            onClick={async () => { await apiFetch(`${API}/notifications/${n.id}`,{method:"DELETE"}); fetchNotifications(); }}>
                             <DeleteIcon sx={{ fontSize:16, color:"#9ca3af" }} />
                           </IconButton>
                         </Tooltip>
@@ -1618,7 +2054,7 @@ export default function App() {
             <Button fullWidth variant="outlined" size="small"
               sx={{ borderColor:"#6366f1", color:"#6366f1", fontWeight:600, borderRadius:2 }}
               onClick={async () => {
-                await fetch(`${API}/notifications/run-checks`, { method:"POST" });
+                await apiFetch(`${API}/notifications/run-checks`, { method:"POST" });
                 fetchNotifications(); showSnack("Notification checks ran!");
               }}>
               🔍 Run checks now
@@ -1693,7 +2129,7 @@ export default function App() {
 
       {/* Add/Edit Dialog */}
       <Dialog open={open} onClose={() => { setOpen(false); resetForm(); }} fullWidth maxWidth="xs">
-        <DialogTitle sx={{ fontWeight:700 }}>{editMode ? "✏️ Edit Entry" : "➕ Add Entry"}</DialogTitle>
+        <DialogTitle sx={{ fontWeight:900, letterSpacing:"-0.5px", pb:1 }}>{editMode ? "✏️ Edit Entry" : "➕ Add Entry"}</DialogTitle>
         <DialogContent sx={{ pt:1 }}>
 
           {/* Asset or Liability toggle */}
@@ -1745,7 +2181,7 @@ export default function App() {
                   setSymbolSearch(val); setSymbol(val);
                   if (val.length >= 2) {
                     try {
-                      const res  = await fetch(`${API}/search-stocks?q=${val}`);
+                      const res  = await apiFetch(`${API}/search-stocks?q=${val}`);
                       const data = await res.json();
                       setSymbolSuggestions(data); setShowSuggestions(true);
                     } catch { setSymbolSuggestions([]); }
@@ -1860,6 +2296,39 @@ export default function App() {
           <Button onClick={() => setSectorOpen(false)}>Cancel</Button>
           <Button variant="contained" onClick={handleUpdateSector}
             sx={{ bgcolor:"#6366f1", "&:hover":{ bgcolor:"#4f46e5" }, fontWeight:700 }}>Save</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Cash Dialog — outside CashTab to prevent re-render focus loss */}
+      <Dialog open={cashOpen} onClose={() => setCashOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle sx={{ fontWeight:700 }}>
+          {cashEditMode ? "✏️ Edit" : cashCategory==="liquid" ? "💵 Add Liquid Cash" : "🛡️ Add Emergency Fund"}
+        </DialogTitle>
+        <DialogContent sx={{ pt:1 }}>
+          <Box sx={{ display:"flex", gap:1, mb:2 }}>
+            {[{v:"liquid",l:"💵 Liquid Cash"},{v:"emergency",l:"🛡️ Emergency"}].map(o => (
+              <Chip key={o.v} label={o.l} onClick={() => setCashCategory(o.v)}
+                sx={{ cursor:"pointer", fontWeight:600,
+                  bgcolor:cashCategory===o.v?"#6366f1":"#f3f4f6",
+                  color:cashCategory===o.v?"white":"#374151" }} />
+            ))}
+          </Box>
+          <TextField label="Name (e.g. HDFC Savings, Emergency FD)" fullWidth sx={{ mb:2 }}
+            value={cashName} onChange={e => setCashName(e.target.value)} />
+          <TextField label="Current Amount (₹)" type="number" fullWidth sx={{ mb:2 }}
+            value={cashAmount} onChange={e => setCashAmount(e.target.value)} />
+          <TextField label="Target Amount (₹) — optional" type="number" fullWidth sx={{ mb:2 }}
+            value={cashTarget} onChange={e => setCashTarget(e.target.value)}
+            helperText={cashCategory==="liquid"?"e.g. 10% of portfolio value":"e.g. 6× monthly expenses"} />
+          <TextField label="Notes (optional)" fullWidth multiline rows={2}
+            value={cashNotes} onChange={e => setCashNotes(e.target.value)} />
+        </DialogContent>
+        <DialogActions sx={{ px:3, pb:2 }}>
+          <Button onClick={() => setCashOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleSaveCash}
+            sx={{ bgcolor:"#6366f1", "&:hover":{ bgcolor:"#4f46e5" }, fontWeight:700 }}>
+            {cashEditMode ? "Update" : "Save"}
+          </Button>
         </DialogActions>
       </Dialog>
 

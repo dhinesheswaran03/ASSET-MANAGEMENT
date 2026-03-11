@@ -4,8 +4,11 @@ const pool    = require("../db");
 const Groq    = require("groq-sdk");
 const axios   = require("axios");
 
+const requireAuth = require("../middleware/authMiddleware");
 const groq  = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const MODEL = "llama-3.3-70b-versatile";
+
+router.use(requireAuth);
 
 // ── Fetch live price from Yahoo Finance ───────────────────────────────────
 const getLivePrice = async (symbol) => {
@@ -22,12 +25,12 @@ const getLivePrice = async (symbol) => {
 };
 
 // ── Build portfolio context with LIVE prices ──────────────────────────────
-const buildPortfolioContext = async () => {
+const buildPortfolioContext = async (userId) => {
   const assetsRes = await pool.query("SELECT * FROM assets ORDER BY id DESC");
-  const liabsRes  = await pool.query("SELECT * FROM liabilities");
-  const divsRes   = await pool.query("SELECT COALESCE(SUM(amount),0) as total FROM dividends");
+  const liabsRes  = await pool.query("SELECT * FROM liabilities WHERE user_id=$1", [userId]);
+  const divsRes   = await pool.query("SELECT COALESCE(SUM(amount),0) as total FROM dividends WHERE user_id=$1", [userId]);
   const histRes   = await pool.query(
-    "SELECT * FROM networth_history ORDER BY recorded_at DESC LIMIT 10"
+    "SELECT * FROM networth_history WHERE user_id=$1 ORDER BY recorded_at DESC LIMIT 10", [userId]
   );
 
   const assets = assetsRes.rows;
@@ -139,7 +142,7 @@ router.post("/chat", async (req, res) => {
       return res.status(400).json({ error: "messages array required" });
     }
 
-    const portfolioContext = await buildPortfolioContext();
+    const portfolioContext = await buildPortfolioContext(req.userId);
 
     const completion = await groq.chat.completions.create({
       model: MODEL,
@@ -166,7 +169,7 @@ router.post("/chat", async (req, res) => {
 // ── GET /advisor/quick-insights ───────────────────────────────────────────
 router.get("/quick-insights", async (req, res) => {
   try {
-    const portfolioContext = await buildPortfolioContext();
+    const portfolioContext = await buildPortfolioContext(req.userId);
 
     const completion = await groq.chat.completions.create({
       model: MODEL,

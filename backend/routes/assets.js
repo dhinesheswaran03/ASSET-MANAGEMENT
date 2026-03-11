@@ -1,10 +1,13 @@
-const express = require("express");
-const router = express.Router();
-const pool = require("../db");
-const axios = require("axios");
-const multer = require("multer");
-const XLSX = require("xlsx");
-const upload = multer({ storage: multer.memoryStorage() });
+const express  = require("express");
+const router   = express.Router();
+const pool     = require("../db");
+const axios    = require("axios");
+const multer   = require("multer");
+const XLSX     = require("xlsx");
+const requireAuth = require("../middleware/authMiddleware");
+const upload   = multer({ storage: multer.memoryStorage() });
+
+router.use(requireAuth);
 
 const getLivePrice = async (symbol) => {
   try {
@@ -14,9 +17,7 @@ const getLivePrice = async (symbol) => {
     );
     const price = res.data?.chart?.result?.[0]?.meta?.regularMarketPrice;
     return price ? Number(price) : null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 };
 
 const getYahooSymbol = (symbol, exchange) => {
@@ -25,128 +26,149 @@ const getYahooSymbol = (symbol, exchange) => {
   return `${symbol}.NS`;
 };
 
-// ✅ Auto-assign sector based on type and name
 const autoSector = (type, name) => {
-  if (type === "Gold")        return "Gold";
-  if (type === "Cash")        return "Cash";
-  if (type === "FD")          return "Fixed Income";
-  if (type === "MutualFund")  return "Mutual Fund";
-  if (type === "Other")       return "Other";
-
-  // Guess from name for Equity / unknown
+  if (type === "Gold")       return "Gold";
+  if (type === "Cash")       return "Cash";
+  if (type === "FD")         return "Fixed Income";
+  if (type === "MutualFund") return "Mutual Fund";
+  if (type === "Other")      return "Other";
   const n = (name || "").toLowerCase();
-  if (n.includes("gold"))                                              return "Gold";
-  if (n.includes("cash") || n.includes("savings"))                    return "Cash";
-  if (n.includes("fd") || n.includes("fixed deposit") || n.includes("recurring")) return "Fixed Income";
-  if (n.includes("nifty") || n.includes("sensex") || n.includes("index"))         return "Index Fund";
-  if (n.includes("mutual") || n.includes("fund"))                     return "Mutual Fund";
-
+  if (n.includes("bank") || n.includes("banking"))                          return "Banking";
+  if (n.includes("finance") || n.includes("finserv") || n.includes("capital") || n.includes("credit")) return "Finance";
+  if (n.includes("pharma") || n.includes("drug") || n.includes("medic") || n.includes("lab"))          return "Pharma";
+  if (n.includes("hospital") || n.includes("health") || n.includes("clinic") || n.includes("diagnostic")) return "Healthcare";
+  if (n.includes("tech") || n.includes("software") || n.includes("digital") || n.includes("infosy"))   return "IT";
+  if (n.includes("auto") || n.includes("motor") || n.includes("vehicle") || n.includes("tyre"))        return "Auto";
+  if (n.includes("steel") || n.includes("metal") || n.includes("alumin") || n.includes("copper"))      return "Metals";
+  if (n.includes("cement") || n.includes("construction") || n.includes("engineer") || n.includes("infra")) return "Infrastructure";
+  if (n.includes("power") || n.includes("energy") || n.includes("oil") || n.includes("gas") || n.includes("petro") || n.includes("coal")) return "Energy";
+  if (n.includes("telecom") || n.includes("airtel") || n.includes("tower"))                            return "Telecom";
+  if (n.includes("fmcg") || n.includes("food") || n.includes("beverage") || n.includes("paint") || n.includes("soap")) return "FMCG";
+  if (n.includes("realty") || n.includes("real estate") || n.includes("property") || n.includes("housing")) return "Realty";
+  if (n.includes("chemical") || n.includes("agro") || n.includes("pesticide") || n.includes("fertilizer")) return "Chemicals";
+  if (n.includes("retail") || n.includes("fashion") || n.includes("jewel") || n.includes("apparel"))   return "Consumer";
+  if (n.includes("gold") || n.includes("sgb"))                             return "Gold";
+  if (n.includes("nifty") || n.includes("sensex") || n.includes("index") || n.includes("etf") || n.includes("bees")) return "Index Fund";
+  if (n.includes("mutual") || n.includes("fund"))                          return "Mutual Fund";
+  if (n.includes("fd") || n.includes("fixed deposit") || n.includes("bond") || n.includes("debenture")) return "Fixed Income";
+  if (n.includes("cash") || n.includes("savings") || n.includes("liquid")) return "Cash";
   return "Unknown";
 };
 
-// GET all assets with live prices
+// GET — only this user's assets
 router.get("/", async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM assets ORDER BY id DESC");
-    const assets = result.rows;
-
-    await Promise.all(
-      assets.map(async (asset) => {
-        if (asset.symbol) {
-          const live = await getLivePrice(asset.symbol);
-          if (live) asset.current_price = live;
-          else asset.current_price = asset.current_price || asset.buy_price;
-        } else {
-          asset.current_price = asset.current_price || asset.buy_price;
-        }
-      })
+    const result = await pool.query(
+      "SELECT * FROM assets WHERE user_id=$1 ORDER BY id DESC", [req.userId]
     );
-
+    const assets = result.rows;
+    await Promise.all(assets.map(async (asset) => {
+      if (asset.symbol) {
+        const live = await getLivePrice(asset.symbol);
+        asset.current_price = live || asset.current_price || asset.buy_price;
+      } else {
+        asset.current_price = asset.current_price || asset.buy_price;
+      }
+    }));
     res.json(assets);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
-  }
+  } catch (err) { console.error(err); res.status(500).json({ error: "Server error" }); }
 });
 
-// POST new asset
+// POST — create asset for this user
 router.post("/", async (req, res) => {
   try {
     const { name, type, buy_price, quantity, symbol } = req.body;
-    if (!name || !buy_price)
-      return res.status(400).json({ error: "Missing fields" });
-
-    const sector    = autoSector(type, name);
-    const qty       = quantity || 1;
-    const assetType = type || "Equity";
-
+    if (!name || !buy_price) return res.status(400).json({ error: "Missing fields" });
+    const sector = autoSector(type, name);
     const result = await pool.query(
-      `INSERT INTO assets (name, type, buy_price, quantity, symbol, current_price, sector)
-       VALUES ($1,$2,$3,$4,$5,$3,$6) RETURNING *`,
-      [name, assetType, buy_price, qty, symbol || null, sector]
+      `INSERT INTO assets (name,type,buy_price,quantity,symbol,current_price,sector,user_id)
+       VALUES ($1,$2,$3,$4,$5,$3,$6,$7) RETURNING *`,
+      [name, type||"Equity", buy_price, quantity||1, symbol||null, sector, req.userId]
     );
     res.json(result.rows[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
-  }
+  } catch (err) { console.error(err); res.status(500).json({ error: "Server error" }); }
 });
 
-// PUT update asset
+// PUT — update only if owned by this user
 router.put("/:id", async (req, res) => {
   try {
     const { name, type, buy_price, quantity, symbol } = req.body;
     const sector = autoSector(type, name);
-    const qty    = quantity || 1;
-
     const result = await pool.query(
-      `UPDATE assets SET name=$1, type=$2, buy_price=$3, quantity=$4, symbol=$5, sector=$6
-       WHERE id=$7 RETURNING *`,
-      [name, type || "Equity", buy_price, qty, symbol || null, sector, req.params.id]
+      `UPDATE assets SET name=$1,type=$2,buy_price=$3,quantity=$4,symbol=$5,sector=$6
+       WHERE id=$7 AND user_id=$8 RETURNING *`,
+      [name, type||"Equity", buy_price, quantity||1, symbol||null, sector, req.params.id, req.userId]
     );
+    if (!result.rows.length) return res.status(404).json({ error: "Not found or access denied" });
     res.json(result.rows[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
-  }
+  } catch (err) { console.error(err); res.status(500).json({ error: "Server error" }); }
 });
 
-// DELETE asset
+// DELETE — only if owned by this user
 router.delete("/:id", async (req, res) => {
-  await pool.query("DELETE FROM assets WHERE id=$1", [req.params.id]);
+  await pool.query("DELETE FROM assets WHERE id=$1 AND user_id=$2", [req.params.id, req.userId]);
   res.json({ message: "Deleted" });
 });
 
-// POST /assets/import-zerodha
+// POST update-prices
+router.post("/update-prices", async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT * FROM assets WHERE user_id=$1 AND symbol IS NOT NULL", [req.userId]
+    );
+    let updated = 0;
+    await Promise.all(result.rows.map(async (a) => {
+      const live = await getLivePrice(a.symbol);
+      if (live) {
+        await pool.query(
+          "UPDATE assets SET current_price=$1,last_updated=NOW() WHERE id=$2 AND user_id=$3",
+          [live, a.id, req.userId]
+        );
+        updated++;
+      }
+    }));
+    res.json({ message: `Updated ${updated} prices` });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PATCH sector
+router.patch("/:id/sector", async (req, res) => {
+  try {
+    const result = await pool.query(
+      "UPDATE assets SET sector=$1 WHERE id=$2 AND user_id=$3 RETURNING *",
+      [req.body.sector, req.params.id, req.userId]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: "Not found or access denied" });
+    res.json(result.rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PATCH target
+router.patch("/:id/target", async (req, res) => {
+  try {
+    const result = await pool.query(
+      "UPDATE assets SET target_pct=$1 WHERE id=$2 AND user_id=$3 RETURNING *",
+      [req.body.target_pct, req.params.id, req.userId]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: "Not found or access denied" });
+    res.json(result.rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST import-zerodha
 router.post("/import-zerodha", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+    const workbook  = XLSX.read(req.file.buffer, { type: "buffer" });
+    const sheetName = workbook.SheetNames.includes("Equity") ? "Equity" : workbook.SheetNames[0];
+    const allRows   = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header:1, defval:null });
 
-    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
-
-    const sheetName = workbook.SheetNames.includes("Equity")
-      ? "Equity"
-      : workbook.SheetNames[0];
-
-    const sheet = workbook.Sheets[sheetName];
-    const allRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
-
-    // Find header row
-    let headerRowIdx = -1;
-    let headers = [];
-
+    let headerRowIdx = -1, headers = [];
     for (let i = 0; i < allRows.length; i++) {
       const row = allRows[i].map(v => (v ? String(v).trim() : ""));
-      if (row.some(v => v === "Instrument" || v === "Symbol")) {
-        headerRowIdx = i;
-        headers = row;
-        break;
-      }
+      if (row.some(v => v === "Instrument" || v === "Symbol")) { headerRowIdx=i; headers=row; break; }
     }
-
-    if (headerRowIdx === -1) {
-      return res.status(400).json({ error: "Could not find header row. Is this a Zerodha holdings file?" });
-    }
+    if (headerRowIdx === -1) return res.status(400).json({ error: "Could not find header row" });
 
     const col = (names) => {
       for (const n of names) {
@@ -155,62 +177,33 @@ router.post("/import-zerodha", upload.single("file"), async (req, res) => {
       }
       return -1;
     };
+    const iSymbol=col(["Instrument","Symbol","Stock"]), iQty=col(["Qty.","Quantity","Qty"]);
+    const iAvgCost=col(["Avg. cost","Avg Cost","Average Price","Buy Price"]);
+    const iLTP=col(["LTP","Last Price","Current Price"]), iExchange=col(["Exchange","Exch"]);
 
-    const iSymbol   = col(["Instrument", "Symbol", "Stock"]);
-    const iQty      = col(["Qty.", "Quantity", "Qty"]);
-    const iAvgCost  = col(["Avg. cost", "Avg Cost", "Average Price", "Buy Price"]);
-    const iLTP      = col(["LTP", "Last Price", "Current Price", "Mkt Price"]);
-    const iExchange = col(["Exchange", "Exch"]);
+    if (iSymbol===-1||iQty===-1||iAvgCost===-1) return res.status(400).json({ error:"Required columns not found" });
 
-    if (iSymbol === -1 || iQty === -1 || iAvgCost === -1) {
-      return res.status(400).json({ error: "Required columns not found (Instrument, Qty, Avg Cost)" });
-    }
-
-    const dataRows = allRows.slice(headerRowIdx + 1);
-    let imported = 0, skipped = 0;
-
-    for (const row of dataRows) {
-      const symbol   = row[iSymbol]   ? String(row[iSymbol]).trim()   : null;
-      const qty      = Number(row[iQty]);
-      const avg      = Number(row[iAvgCost]);
-      const ltp      = iLTP !== -1 ? Number(row[iLTP]) : avg;
-      const exchange = iExchange !== -1 ? String(row[iExchange] || "").trim() : "NSE";
-
-      if (!symbol || isNaN(qty) || qty === 0 || isNaN(avg) || avg === 0) {
-        skipped++; continue;
-      }
-      if (symbol.toLowerCase().includes("total") || symbol.toLowerCase().includes("summary")) {
-        skipped++; continue;
-      }
-
-      const yahooSymbol = getYahooSymbol(symbol, exchange);
-
-      const existing = await pool.query(
-        "SELECT id FROM assets WHERE symbol = $1", [yahooSymbol]
-      );
-
-      if (existing.rows.length > 0) {
-        await pool.query(
-          `UPDATE assets SET buy_price=$1, quantity=$2, current_price=$3 WHERE symbol=$4`,
-          [avg, qty, ltp || avg, yahooSymbol]
-        );
+    let imported=0, skipped=0;
+    for (const row of allRows.slice(headerRowIdx+1)) {
+      const symbol = row[iSymbol] ? String(row[iSymbol]).trim() : null;
+      const qty=Number(row[iQty]), avg=Number(row[iAvgCost]);
+      const ltp=iLTP!==-1?Number(row[iLTP]):avg;
+      const exchange=iExchange!==-1?String(row[iExchange]||"").trim():"NSE";
+      if (!symbol||isNaN(qty)||qty===0||isNaN(avg)||avg===0) { skipped++; continue; }
+      if (symbol.toLowerCase().includes("total")) { skipped++; continue; }
+      const ySym = getYahooSymbol(symbol, exchange);
+      const existing = await pool.query("SELECT id FROM assets WHERE symbol=$1 AND user_id=$2", [ySym, req.userId]);
+      if (existing.rows.length>0) {
+        await pool.query(`UPDATE assets SET buy_price=$1,quantity=$2,current_price=$3 WHERE symbol=$4 AND user_id=$5`,
+          [avg, qty, ltp||avg, ySym, req.userId]);
       } else {
-        await pool.query(
-          `INSERT INTO assets (name, type, buy_price, quantity, symbol, current_price, sector)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [symbol, "Equity", avg, qty, yahooSymbol, ltp || avg, "Unknown"]
-        );
+        await pool.query(`INSERT INTO assets (name,type,buy_price,quantity,symbol,current_price,sector,user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [symbol,"Equity",avg,qty,ySym,ltp||avg,"Unknown",req.userId]);
       }
-
       imported++;
     }
-
-    res.json({ imported, skipped, message: `Successfully imported ${imported} holdings` });
-
-  } catch (err) {
-    console.error("Import error:", err);
-    res.status(500).json({ error: "Import failed: " + err.message });
-  }
+    res.json({ imported, skipped, message: `Imported ${imported} holdings` });
+  } catch (err) { console.error(err); res.status(500).json({ error: "Import failed: "+err.message }); }
 });
 
 module.exports = router;

@@ -1,97 +1,79 @@
 const express = require("express");
 const router  = express.Router();
 const pool    = require("../db");
+const requireAuth = require("../middleware/authMiddleware");
 
-// ── Ensure cash_holdings table exists ─────────────────────────────────────
-const initTable = async () => {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS cash_holdings (
-      id            SERIAL PRIMARY KEY,
-      name          VARCHAR(200) NOT NULL,
-      category      VARCHAR(50)  NOT NULL DEFAULT 'liquid', -- 'liquid' | 'emergency'
-      amount        NUMERIC(15,2) NOT NULL DEFAULT 0,
-      target_amount NUMERIC(15,2) DEFAULT 0,
-      notes         TEXT,
-      created_at    TIMESTAMP DEFAULT NOW(),
-      updated_at    TIMESTAMP DEFAULT NOW()
-    )
-  `);
-};
-initTable().catch(console.error);
+router.use(requireAuth);
 
-// GET all cash holdings
+// Auto-create table
+pool.query(`
+  CREATE TABLE IF NOT EXISTS cash_holdings (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'liquid',
+    amount NUMERIC(15,2) NOT NULL DEFAULT 0,
+    target_amount NUMERIC(15,2) DEFAULT 0,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )
+`).catch(console.error);
+
 router.get("/", async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM cash_holdings ORDER BY category, id DESC");
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    const r = await pool.query(
+      "SELECT * FROM cash_holdings WHERE user_id=$1 ORDER BY id DESC", [req.userId]
+    );
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// GET summary
-router.get("/summary", async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT
-        category,
-        COALESCE(SUM(amount),0)        AS total,
-        COALESCE(SUM(target_amount),0) AS target
-      FROM cash_holdings
-      GROUP BY category
-    `);
-    const summary = { liquid:{ total:0, target:0 }, emergency:{ total:0, target:0 } };
-    result.rows.forEach(r => {
-      if (summary[r.category]) {
-        summary[r.category].total  = Number(r.total);
-        summary[r.category].target = Number(r.target);
-      }
-    });
-    res.json(summary);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// POST add cash holding
 router.post("/", async (req, res) => {
   try {
     const { name, category, amount, target_amount, notes } = req.body;
-    if (!name || !amount) return res.status(400).json({ error: "Name and amount required" });
-    const result = await pool.query(
-      `INSERT INTO cash_holdings (name, category, amount, target_amount, notes)
-       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [name, category||"liquid", Number(amount), Number(target_amount)||0, notes||null]
+    const r = await pool.query(
+      `INSERT INTO cash_holdings (user_id,name,category,amount,target_amount,notes)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [req.userId, name, category||"liquid", amount||0, target_amount||0, notes||""]
     );
-    res.json(result.rows[0]);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    res.json(r.rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// PUT update cash holding
 router.put("/:id", async (req, res) => {
   try {
     const { name, category, amount, target_amount, notes } = req.body;
-    const result = await pool.query(
-      `UPDATE cash_holdings SET name=$1, category=$2, amount=$3, target_amount=$4, notes=$5, updated_at=NOW()
-       WHERE id=$6 RETURNING *`,
-      [name, category||"liquid", Number(amount), Number(target_amount)||0, notes||null, req.params.id]
+    const r = await pool.query(
+      `UPDATE cash_holdings SET name=$1,category=$2,amount=$3,target_amount=$4,notes=$5
+       WHERE id=$6 AND user_id=$7 RETURNING *`,
+      [name, category||"liquid", amount||0, target_amount||0, notes||"", req.params.id, req.userId]
     );
-    res.json(result.rows[0]);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    if (!r.rows.length) return res.status(404).json({ error: "Not found or access denied" });
+    res.json(r.rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// DELETE
 router.delete("/:id", async (req, res) => {
+  await pool.query("DELETE FROM cash_holdings WHERE id=$1 AND user_id=$2", [req.params.id, req.userId]);
+  res.json({ message: "Deleted" });
+});
+
+// GET /cash/summary — aggregated by category
+router.get("/summary", async (req, res) => {
   try {
-    await pool.query("DELETE FROM cash_holdings WHERE id=$1", [req.params.id]);
-    res.json({ message: "Deleted" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    const r = await pool.query(
+      "SELECT category, SUM(amount) as total, SUM(target_amount) as target FROM cash_holdings WHERE user_id=$1 GROUP BY category",
+      [req.userId]
+    );
+    const summary = { liquid:{total:0,target:0}, emergency:{total:0,target:0} };
+    r.rows.forEach(row => {
+      if (summary[row.category]) {
+        summary[row.category].total  = Number(row.total);
+        summary[row.category].target = Number(row.target);
+      }
+    });
+    res.json(summary);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 module.exports = router;
