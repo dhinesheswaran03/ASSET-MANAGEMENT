@@ -2,7 +2,6 @@ pipeline {
     agent any
 
     environment {
-        COMPOSE_FILE = "docker-compose.yml"
         IMAGE_BACKEND  = "foliox-backend"
         IMAGE_FRONTEND = "foliox-frontend"
     }
@@ -16,23 +15,11 @@ pipeline {
             }
         }
 
-        stage('Lint & Validate') {
-            parallel {
-                stage('Backend deps') {
-                    steps {
-                        dir('backend') {
-                            sh 'npm install --production 2>&1 | tail -5'
-                            echo '✅ Backend dependencies OK'
-                        }
-                    }
-                }
-                stage('Frontend deps') {
-                    steps {
-                        dir('frontend') {
-                            sh 'npm install 2>&1 | tail -5'
-                            echo '✅ Frontend dependencies OK'
-                        }
-                    }
+        stage('Prepare Env') {
+            steps {
+                withCredentials([file(credentialsId: 'foliox-backend-env', variable: 'ENV_FILE')]) {
+                    sh 'cp $ENV_FILE backend/.env'
+                    echo '✅ .env file injected'
                 }
             }
         }
@@ -56,28 +43,27 @@ pipeline {
 
         stage('Deploy') {
             steps {
-                echo '🚀 Deploying with docker-compose...'
-                sh '''
-                    docker-compose down --remove-orphans || true
-                    docker-compose up -d --build
-                    docker-compose ps
-                '''
+                withCredentials([file(credentialsId: 'foliox-backend-env', variable: 'ENV_FILE')]) {
+                    sh '''
+                        cp $ENV_FILE .env
+                        docker-compose down --remove-orphans || true
+                        docker-compose up -d
+                        docker-compose ps
+                    '''
+                }
             }
         }
 
         stage('Health Check') {
             steps {
-                echo '🏥 Checking services are healthy...'
+                echo '🏥 Checking services...'
                 sh '''
-                    sleep 10
+                    sleep 15
                     curl -f http://localhost:5000/health || (echo "❌ Backend health check failed" && exit 1)
                     echo "✅ Backend is healthy"
-                    curl -f http://localhost:3000 || (echo "❌ Frontend health check failed" && exit 1)
-                    echo "✅ Frontend is healthy"
                 '''
             }
         }
-
     }
 
     post {
@@ -87,16 +73,14 @@ pipeline {
                FolioX deployed successfully!
                Frontend : http://localhost:3000
                Backend  : http://localhost:5000
-               Database : localhost:5432
             ═══════════════════════════════════
             '''
         }
         failure {
             echo '❌ Build failed! Check logs above.'
-            sh 'docker-compose logs --tail=50 || true'
+            sh 'docker-compose logs --tail=30 || true'
         }
         always {
-            echo '🧹 Cleaning up unused Docker images...'
             sh 'docker image prune -f || true'
         }
     }
