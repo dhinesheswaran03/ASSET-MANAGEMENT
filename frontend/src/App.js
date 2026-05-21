@@ -128,13 +128,28 @@ function LoginPage() {
             { icon:"🏭", text:"Sector allocation & drift alerts" },
             { icon:"💰", text:"Dividend tracker & P&L analytics" },
             { icon:"🤖", text:"AI Portfolio Advisor" },
-            { icon:"🔱", text:"By Eswar Groups" },
-          ].map((f,i) => (
+            ].map((f,i) => (
             <Box key={i} sx={{ display:"flex", alignItems:"center", gap:1.5, mb:1.2, textAlign:"left" }}>
               <Typography sx={{ fontSize:16 }}>{f.icon}</Typography>
               <Typography sx={{ fontSize:13, color:"#1A1A2E" }}>{f.text}</Typography>
             </Box>
           ))}
+
+          {/* By Eswar Groups — premium badge */}
+          <Box sx={{ display:"flex", justifyContent:"center", mt:2, mb:0.5 }}>
+            <Box sx={{
+              display:"flex", alignItems:"center", gap:1,
+              px:2.5, py:0.8, borderRadius:"20px",
+              background:"linear-gradient(135deg, #0066FF 0%, #6C3CFF 100%)",
+              boxShadow:"0 4px 14px rgba(0,102,255,0.35)",
+            }}>
+              <Typography sx={{ fontSize:14 }}>🔱</Typography>
+              <Typography sx={{
+                fontSize:12, fontWeight:700, color:"white",
+                letterSpacing:"1.5px", textTransform:"uppercase"
+              }}>By Eswar Groups</Typography>
+            </Box>
+          </Box>
           <Button fullWidth variant="contained" size="large"
             startIcon={<GoogleIcon />}
             onClick={() => { window.location.href = `${API}/auth/google`; }}
