@@ -4,6 +4,7 @@ pipeline {
     environment {
         IMAGE_BACKEND  = "foliox-backend"
         IMAGE_FRONTEND = "foliox-frontend"
+        COMPOSE_PROJECT_NAME = "foliox"
     }
 
     stages {
@@ -18,7 +19,10 @@ pipeline {
         stage('Prepare Env') {
             steps {
                 withCredentials([file(credentialsId: 'foliox-backend-env', variable: 'ENV_FILE')]) {
-                    sh 'cp $ENV_FILE backend/.env'
+                    sh '''
+                        cp $ENV_FILE backend/.env
+                        cp $ENV_FILE .env
+                    '''
                     echo '✅ .env file injected'
                 }
             }
@@ -43,14 +47,18 @@ pipeline {
 
         stage('Deploy') {
             steps {
-                withCredentials([file(credentialsId: 'foliox-backend-env', variable: 'ENV_FILE')]) {
-                    sh '''
-                        cp $ENV_FILE .env
-                        docker-compose down --remove-orphans || true
-                        docker-compose up -d
-                        docker-compose ps
-                    '''
-                }
+                sh '''
+                    # Force remove existing containers to avoid conflicts
+                    docker rm -f foliox-backend foliox-frontend || true
+
+                    # Remove old network if exists
+                    docker network rm foliox_foliox-net || true
+                    docker network rm foliox-net || true
+
+                    # Start fresh
+                    docker-compose up -d
+                    docker-compose ps
+                '''
             }
         }
 
@@ -78,7 +86,7 @@ pipeline {
         }
         failure {
             echo '❌ Build failed! Check logs above.'
-            sh 'docker-compose logs --tail=30 || true'
+            sh 'docker ps -a || true'
         }
         always {
             sh 'docker image prune -f || true'
