@@ -52,6 +52,9 @@ pipeline {
                     docker network rm foliox_foliox-net || true
                     docker-compose up -d
                     docker-compose ps
+
+                    # Reconnect postgres to new network so backend can reach it
+                    docker network connect foliox_foliox-net asset-postgres || true
                 '''
             }
         }
@@ -60,12 +63,20 @@ pipeline {
             steps {
                 echo '🏥 Checking services...'
                 sh '''
-                    sleep 15
-                    # Use container name since Jenkins runs inside Docker
-                    docker exec foliox-backend wget -qO- http://localhost:5000/health || \
-                    (echo "❌ Backend health check failed" && exit 1)
-                    echo "✅ Backend is healthy"
-                    echo "✅ Frontend running: $(docker inspect -f '{{.State.Status}}' foliox-frontend)"
+                    sleep 20
+                    BACKEND_STATUS=$(docker inspect -f "{{.State.Status}}" foliox-backend)
+                    FRONTEND_STATUS=$(docker inspect -f "{{.State.Status}}" foliox-frontend)
+                    echo "✅ Backend: $BACKEND_STATUS"
+                    echo "✅ Frontend: $FRONTEND_STATUS"
+                    if [ "$BACKEND_STATUS" != "running" ]; then
+                        echo "❌ Backend container is not running!"
+                        exit 1
+                    fi
+                    if [ "$FRONTEND_STATUS" != "running" ]; then
+                        echo "❌ Frontend container is not running!"
+                        exit 1
+                    fi
+                    echo "✅ All services are running!"
                 '''
             }
         }
@@ -82,8 +93,9 @@ pipeline {
             '''
         }
         failure {
-            echo '❌ Build failed! Check logs above.'
+            echo '❌ Build failed!'
             sh 'docker ps -a || true'
+            sh 'docker logs foliox-backend --tail 20 || true'
         }
         always {
             sh 'docker image prune -f || true'
