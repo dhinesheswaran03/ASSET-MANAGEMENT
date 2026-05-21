@@ -128,6 +128,7 @@ function LoginPage() {
             { icon:"🏭", text:"Sector allocation & drift alerts" },
             { icon:"💰", text:"Dividend tracker & P&L analytics" },
             { icon:"🤖", text:"AI Portfolio Advisor" },
+            { icon:"🔱", text:"By Eswar Groups" },
           ].map((f,i) => (
             <Box key={i} sx={{ display:"flex", alignItems:"center", gap:1.5, mb:1.2, textAlign:"left" }}>
               <Typography sx={{ fontSize:16 }}>{f.icon}</Typography>
