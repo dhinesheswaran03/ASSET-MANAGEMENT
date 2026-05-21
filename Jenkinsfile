@@ -33,13 +33,13 @@ pipeline {
                 stage('Build Backend') {
                     steps {
                         echo '🐳 Building backend image...'
-                        sh "docker build -t ${IMAGE_BACKEND}:${BUILD_NUMBER} -t ${IMAGE_BACKEND}:latest ./backend"
+                        sh "docker build --no-cache -t ${IMAGE_BACKEND}:${BUILD_NUMBER} -t ${IMAGE_BACKEND}:latest ./backend"
                     }
                 }
                 stage('Build Frontend') {
                     steps {
                         echo '🐳 Building frontend image...'
-                        sh "docker build -t ${IMAGE_FRONTEND}:${BUILD_NUMBER} -t ${IMAGE_FRONTEND}:latest ./frontend"
+                        sh "docker build --no-cache -t ${IMAGE_FRONTEND}:${BUILD_NUMBER} -t ${IMAGE_FRONTEND}:latest ./frontend"
                     }
                 }
             }
