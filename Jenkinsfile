@@ -48,14 +48,8 @@ pipeline {
         stage('Deploy') {
             steps {
                 sh '''
-                    # Force remove existing containers to avoid conflicts
                     docker rm -f foliox-backend foliox-frontend || true
-
-                    # Remove old network if exists
                     docker network rm foliox_foliox-net || true
-                    docker network rm foliox-net || true
-
-                    # Start fresh
                     docker-compose up -d
                     docker-compose ps
                 '''
@@ -67,8 +61,11 @@ pipeline {
                 echo '🏥 Checking services...'
                 sh '''
                     sleep 15
-                    curl -f http://localhost:5000/health || (echo "❌ Backend health check failed" && exit 1)
+                    # Use container name since Jenkins runs inside Docker
+                    docker exec foliox-backend wget -qO- http://localhost:5000/health || \
+                    (echo "❌ Backend health check failed" && exit 1)
                     echo "✅ Backend is healthy"
+                    echo "✅ Frontend running: $(docker inspect -f '{{.State.Status}}' foliox-frontend)"
                 '''
             }
         }
