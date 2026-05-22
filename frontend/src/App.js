@@ -147,7 +147,7 @@ function LoginPage() {
               <Typography sx={{
                 fontSize:12, fontWeight:700, color:"white",
                 letterSpacing:"1.5px", textTransform:"uppercase"
-              }}>By Eswar Groups</Typography>
+              }}>By Eswar Group</Typography>
             </Box>
           </Box>
           <Button fullWidth variant="contained" size="large"
