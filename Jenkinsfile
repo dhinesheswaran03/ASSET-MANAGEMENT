@@ -28,6 +28,15 @@ pipeline {
             }
         }
 
+        stage('Maven Test') {
+            steps {
+                echo '🧪 Running Maven tests...'
+                    dir('backend') {
+                    sh 'mvn clean test'
+                }
+            }
+        }
+        
         stage('Build Docker Images') {
             parallel {
                 stage('Build Backend') {
